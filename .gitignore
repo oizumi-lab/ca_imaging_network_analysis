@@ -1,0 +1,30 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+.ruff_cache/
+
+# --- Virtual env (in-project poetry .venv) ---
+.venv/
+
+# --- Data (large; downloaded separately, see scripts/download_data.py) ---
+data/
+
+# --- Generated figures / outputs ---
+scripts/figures/
+documents/figures/
+
+# --- Run logs (machine-local) ---
+logs/*.log
+!logs/.gitkeep
+
+# --- Claude local (machine-specific) settings ---
+.claude/settings.local.json
+
+# --- OS / editor ---
+.DS_Store
+*.swp
+.vscode/
+.idea/
