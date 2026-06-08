@@ -40,8 +40,11 @@ Open the `scripts/*.py` files as **interactive `# %%` cell scripts** in VS Code
 | `20_modularity.py` | Density thresholding, Louvain modularity, resolution, robustness |
 | `30_state_comparison.py` | **The result:** modularity is higher during sleep/anesthesia |
 
-Reusable code lives in `scripts/lib/`: `dataio.py` (v2.0 loader) and
-`network.py` (correlation → threshold → Louvain → modularity).
+Reusable code lives in the `src/funcnet/` package (editable-installed by
+`poetry install`): `dataio.py` (v2.0 loader), `network.py` (correlation →
+threshold → Louvain → modularity), `paths.py` (project paths). Scripts import it
+with `from funcnet import dataio, network as net` — no path hacks. Generated
+figures/CSVs go to `results/`.
 
 ## Notes
 

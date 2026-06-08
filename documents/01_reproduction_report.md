@@ -7,7 +7,7 @@ building teaching materials on top.
 
 ## What we ported
 
-| MATLAB (repo / example) | Python (`scripts/lib/network.py`) |
+| MATLAB (repo / example) | Python (`src/funcnet/network.py`) |
 |---|---|
 | `corr(spike')`, zero diagonal | `correlation_matrix()` |
 | `densityBasedThresh(C, K, option)` | `density_threshold()` |
@@ -15,7 +15,7 @@ building teaching materials on top.
 | `repeat_modularity_analysis` + `get_maxQ` | `repeat_louvain()` |
 | `perform_consensus_clustering` (`agreement`, `consensus_und`) | `consensus_partition()` |
 
-Data loading was rewritten for v2.0 in `scripts/lib/dataio.py` (see
+Data loading was rewritten for v2.0 in `src/funcnet/dataio.py` (see
 `.claude/rules/dataset-v2-format.md`). The two substantive changes versus v1:
 
 1. **File format.** v2.0 `.mat` files are MATLAB **v7.3 (HDF5)**; `scipy.io.loadmat`

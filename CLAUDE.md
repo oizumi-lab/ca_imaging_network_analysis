@@ -21,9 +21,10 @@ the analysis in:
 
 ```
 .claude/        project rules & shared settings
+src/funcnet/    installable package: dataio.py (loader), network.py (analysis),
+                paths.py (project paths). Editable-installed by `poetry install`.
 data/raw/       the 11 downloaded .mat recordings  (gitignored, ~11 GB)
-scripts/        Python code
-  lib/          reusable modules: dataio.py (loader), network.py (analysis)
+scripts/        Python entry-point scripts (import from funcnet)
   download_data.py            fetch the dataset into data/raw/
   00_inspect_data.py          explore one recording
   01_reproduce_example.py     faithful port of the dataset's example_network_analysis.m
@@ -32,6 +33,7 @@ scripts/        Python code
   30_state_comparison.py      the lecture result (modularity awake vs sleep/ane)
 references/     paper/dataset README, Figure_guide, original MATLAB example
 documents/      written walkthrough + reproduction report
+results/        generated outputs — results/figures/ etc. (gitignored)
 logs/           run logs (downloads, long jobs)
 ```
 
@@ -39,9 +41,14 @@ logs/           run logs (downloads, long jobs)
 
 - **Hands-on scripts are interactive `# %%` cell scripts** (VS Code / Spyder),
   **not** `.ipynb`, and have **no `main()`** — flat top-level cells. Reusable
-  logic goes in `scripts/lib/` (normal functions).
+  logic goes in the `src/funcnet/` package (normal functions).
+- **Imports:** `funcnet` is an editable-installed package (src layout), so scripts
+  just do `from funcnet import dataio, network as net` — no `sys.path` hacks, works
+  from any directory and any machine. Re-run `poetry install` after pulling.
+- **Outputs go to `results/`** (e.g. `from funcnet.paths import FIG_DIR`). Don't
+  write generated files into `scripts/`.
 - English for all materials.
-- `data/` and `.venv/` are gitignored. Don't commit data or the venv.
+- `data/`, `.venv/`, and `results/` are gitignored. Don't commit data or the venv.
 
 ## Environment
 
@@ -65,7 +72,7 @@ The MATLAB repo targets dataset **v1.0**; we use **v2.0**, which renamed
 variables AND stores `.mat` files as **MATLAB v7.3 (HDF5)**. Consequences:
 
 - `scipy.io.loadmat` **cannot** read these files — use `pymatreader` (already
-  wired into `scripts/lib/dataio.py`).
+  wired into `src/funcnet/dataio.py`).
 - Variable renames and 1-based→0-based frame indices are handled by the loader.
   Full mapping: see `.claude/rules/dataset-v2-format.md`.
 - `ROIs.atlas` (region labels) is a MATLAB *string-class* object that neither

@@ -17,24 +17,17 @@
 # (3) the **resolution** parameter.
 
 # %%
-import sys
-import pathlib
 import warnings
-
-_base = pathlib.Path(__file__).resolve().parent if "__file__" in globals() else pathlib.Path.cwd()
-_scripts = next((p for p in [_base, *_base.parents] if (p / "lib" / "dataio.py").exists()), None) \
-    or next((p / "scripts" for p in [_base, *_base.parents] if (p / "scripts" / "lib" / "dataio.py").exists()), None)
-sys.path.insert(0, str(_scripts))
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-from lib import dataio
-from lib import network as net
+from funcnet import dataio
+from funcnet import network as net
+from funcnet.paths import FIG_DIR
 
 warnings.filterwarnings("ignore", message="invalid value encountered in divide")
-_figdir = pathlib.Path(_scripts) / "figures"
-_figdir.mkdir(exist_ok=True)
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %%
 rec = dataio.load_recording("mouse07_ane")
@@ -63,7 +56,7 @@ for ax, K in zip(axes, [0.02, 0.05, 0.10]):
     ax.set_xticks([]); ax.set_yticks([])
 fig.suptitle("Module-sorted adjacency at increasing density", y=1.02)
 fig.tight_layout()
-fig.savefig(_figdir / "20_density_blocks.png", dpi=140, bbox_inches="tight")
+fig.savefig(FIG_DIR / "20_density_blocks.png", dpi=140, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -87,7 +80,7 @@ ax.set_ylabel("count (of 100 runs)")
 ax.set_title("Stochasticity of Louvain — why we take the maximum")
 ax.legend()
 fig.tight_layout()
-fig.savefig(_figdir / "20_louvain_distribution.png", dpi=140)
+fig.savefig(FIG_DIR / "20_louvain_distribution.png", dpi=140)
 plt.show()
 
 # %% [markdown]
@@ -119,7 +112,7 @@ ax.set_aspect("equal"); ax.invert_yaxis()
 ax.set_title(f"{rec.name} — awake, K={K:.0%}\n{net.n_modules(ci)} spatially intermixed modules")
 ax.set_xlabel("x (px)"); ax.set_ylabel("y (px)")
 fig.tight_layout()
-fig.savefig(_figdir / "20_spatial_modules.png", dpi=140)
+fig.savefig(FIG_DIR / "20_spatial_modules.png", dpi=140)
 plt.show()
 
 # %% [markdown]

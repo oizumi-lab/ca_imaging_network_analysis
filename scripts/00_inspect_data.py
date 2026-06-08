@@ -9,21 +9,13 @@
 # (RIKEN 20260409-001 v2.0; Kiyooka & Oomoto et al., Cell Reports 2026).
 
 # %%
-# --- make the local `lib` package importable (run from repo root or scripts/) ---
-import sys
-import pathlib
-
-_base = pathlib.Path(__file__).resolve().parent if "__file__" in globals() else pathlib.Path.cwd()
-_scripts = next((p for p in [_base, *_base.parents] if (p / "lib" / "dataio.py").exists()), None) \
-    or next((p / "scripts" for p in [_base, *_base.parents] if (p / "scripts" / "lib" / "dataio.py").exists()), None)
-if _scripts is None:
-    raise RuntimeError("Could not locate scripts/lib; run from inside the project tree.")
-sys.path.insert(0, str(_scripts))
-
 import numpy as np
 import matplotlib.pyplot as plt
 
-from lib import dataio
+from funcnet import dataio
+from funcnet.paths import FIG_DIR
+
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
 # ## Load a recording
@@ -91,11 +83,9 @@ axes[1].set_xlabel("time (min)")
 axes[1].set_ylabel("state")
 fig.tight_layout()
 
-_figdir = pathlib.Path(_scripts) / "figures"
-_figdir.mkdir(exist_ok=True)
-fig.savefig(_figdir / "00_inspect_traces.png", dpi=130)
+fig.savefig(FIG_DIR / "00_inspect_traces.png", dpi=130)
 plt.show()
-print("saved ->", _figdir / "00_inspect_traces.png")
+print("saved ->", FIG_DIR / "00_inspect_traces.png")
 
 # %% [markdown]
 # ## Spatial layout of the neurons
@@ -112,5 +102,5 @@ ax.set_xlabel("x (µm)")
 ax.set_ylabel("y (µm)")
 ax.set_title(f"Neuron positions (N = {rec.n_neurons})")
 fig.tight_layout()
-fig.savefig(_figdir / "00_inspect_positions.png", dpi=130)
+fig.savefig(FIG_DIR / "00_inspect_positions.png", dpi=130)
 plt.show()

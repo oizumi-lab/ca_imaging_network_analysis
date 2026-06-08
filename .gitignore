@@ -12,9 +12,9 @@ __pycache__/
 # --- Data (large; downloaded separately, see scripts/download_data.py) ---
 data/
 
-# --- Generated figures / outputs ---
-scripts/figures/
-documents/figures/
+# --- Generated results (figures, csv, ...) ---
+results/*
+!results/.gitkeep
 
 # --- Run logs (machine-local) ---
 logs/*.log

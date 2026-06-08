@@ -14,24 +14,17 @@
 # functional network reorganise between wakefulness and unconsciousness?*
 
 # %%
-import sys
-import pathlib
 import warnings
-
-_base = pathlib.Path(__file__).resolve().parent if "__file__" in globals() else pathlib.Path.cwd()
-_scripts = next((p for p in [_base, *_base.parents] if (p / "lib" / "dataio.py").exists()), None) \
-    or next((p / "scripts" for p in [_base, *_base.parents] if (p / "scripts" / "lib" / "dataio.py").exists()), None)
-sys.path.insert(0, str(_scripts))
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-from lib import dataio
-from lib import network as net
+from funcnet import dataio
+from funcnet import network as net
+from funcnet.paths import FIG_DIR
 
 warnings.filterwarnings("ignore", message="invalid value encountered in divide")
-_figdir = pathlib.Path(_scripts) / "figures"
-_figdir.mkdir(exist_ok=True)
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
 # ## Choose a recording
@@ -83,7 +76,7 @@ for ax, Cmat, lab in [(axes[0], C_awake, awake_label), (axes[1], C_second, secon
     ax.set_xlabel("neuron")
     ax.set_ylabel("neuron")
 fig.colorbar(im, ax=axes, shrink=0.7, label="Pearson r")
-fig.savefig(_figdir / "10_connectivity_matrices.png", dpi=140)
+fig.savefig(FIG_DIR / "10_connectivity_matrices.png", dpi=140)
 plt.show()
 
 # %% [markdown]
@@ -103,7 +96,7 @@ ax.set_ylabel("density")
 ax.set_title(f"{rec.name}: correlation distribution by state")
 ax.legend()
 fig.tight_layout()
-fig.savefig(_figdir / "10_correlation_hist.png", dpi=140)
+fig.savefig(FIG_DIR / "10_correlation_hist.png", dpi=140)
 plt.show()
 
 for lab, Cmat in [(awake_label, C_awake), (second_label, C_second)]:

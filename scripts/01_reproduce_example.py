@@ -14,26 +14,18 @@
 #                + spatial module map
 # ```
 #
-# Our Python ports live in ``scripts/lib/network.py`` and are line-for-line
+# Our Python ports live in ``src/funcnet/network.py`` and are line-for-line
 # faithful to the MATLAB originals in ``oizumi-lab/mouse_network_2P``.
 
 # %%
-import sys
-import pathlib
-
-_base = pathlib.Path(__file__).resolve().parent if "__file__" in globals() else pathlib.Path.cwd()
-_scripts = next((p for p in [_base, *_base.parents] if (p / "lib" / "dataio.py").exists()), None) \
-    or next((p / "scripts" for p in [_base, *_base.parents] if (p / "scripts" / "lib" / "dataio.py").exists()), None)
-sys.path.insert(0, str(_scripts))
-
 import numpy as np
 import matplotlib.pyplot as plt
 
-from lib import dataio
-from lib import network as net
+from funcnet import dataio
+from funcnet import network as net
+from funcnet.paths import FIG_DIR
 
-_figdir = pathlib.Path(_scripts) / "figures"
-_figdir.mkdir(exist_ok=True)
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
 # ## Step 1 — load the same variables the MATLAB example loads
@@ -123,9 +115,9 @@ axes[1].set_title(f"Cortical spatial module map ({net.n_modules(ci)} modules)")
 axes[1].set_xlabel("x (px)")
 axes[1].set_ylabel("y (px)")
 fig.tight_layout()
-fig.savefig(_figdir / "01_reproduce_example.png", dpi=140)
+fig.savefig(FIG_DIR / "01_reproduce_example.png", dpi=140)
 plt.show()
-print("saved ->", _figdir / "01_reproduce_example.png")
+print("saved ->", FIG_DIR / "01_reproduce_example.png")
 
 # %% [markdown]
 # ## Summary

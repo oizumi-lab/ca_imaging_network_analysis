@@ -15,24 +15,17 @@
 # across a range of densities.
 
 # %%
-import sys
-import pathlib
 import warnings
-
-_base = pathlib.Path(__file__).resolve().parent if "__file__" in globals() else pathlib.Path.cwd()
-_scripts = next((p for p in [_base, *_base.parents] if (p / "lib" / "dataio.py").exists()), None) \
-    or next((p / "scripts" for p in [_base, *_base.parents] if (p / "scripts" / "lib" / "dataio.py").exists()), None)
-sys.path.insert(0, str(_scripts))
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-from lib import dataio
-from lib import network as net
+from funcnet import dataio
+from funcnet import network as net
+from funcnet.paths import FIG_DIR
 
 warnings.filterwarnings("ignore", message="invalid value encountered in divide")
-_figdir = pathlib.Path(_scripts) / "figures"
-_figdir.mkdir(exist_ok=True)
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
 # ## Settings
@@ -139,7 +132,7 @@ plot_curves(axes[1], ane_curves, "Wakefulness vs anesthesia")
 fig.suptitle("Single-cell functional-network modularity is higher during unconsciousness",
              y=1.02, fontsize=13)
 fig.tight_layout()
-fig.savefig(_figdir / "30_state_comparison.png", dpi=140, bbox_inches="tight")
+fig.savefig(FIG_DIR / "30_state_comparison.png", dpi=140, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]

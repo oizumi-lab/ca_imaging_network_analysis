@@ -29,7 +29,7 @@ poetry run python scripts/download_data.py --example   # 84 MB, enough to start
 ```
 
 Open scripts in VS Code (Python extension) or Spyder and run cell by cell
-(`# %%` markers). Each script saves its figures to `scripts/figures/`.
+(`# %%` markers). Each script saves its figures to `results/figures/`.
 
 ## 1 · Inspect the data — `00_inspect_data.py`
 
@@ -96,8 +96,8 @@ reduced information integration when consciousness is lost.
 ## Cheat-sheet (the library API)
 
 ```python
-from lib import dataio
-from lib import network as net
+from funcnet import dataio
+from funcnet import network as net
 
 rec  = dataio.load_recording("mouse07_ane")      # v2.0 loader
 X    = dataio.activity(rec, "anesthesia",        # (N, n_frames) for a state

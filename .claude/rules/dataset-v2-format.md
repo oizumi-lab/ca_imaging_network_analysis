@@ -22,7 +22,7 @@ The `.mat` files are HDF5 (`MATLAB 7.3 MAT-file ... HDF5 schema`). **`scipy.io.l
 cannot read them** even though the dataset README claims it can. Use
 `pymatreader.read_mat` (handles v7.3, transposes arrays to MATLAB `N×T`
 orientation, structs→dicts, cells→lists). All loading is centralised in
-`scripts/lib/dataio.py` — use `dataio.load_recording(name)`.
+`src/funcnet/dataio.py` — use `dataio.load_recording(name)`.
 
 ## Variable mapping (v1 MATLAB repo → v2.0 dataset)
 
@@ -65,4 +65,4 @@ State codes — **sleep**: 0 awake, 0.5 quiet-awake, 1 NREM, 2 REM.
 `spike_smoothed → corr() → zero diag → density_threshold(K=0.05) →
 community_louvain(gamma=1) → Q`. Full study: Louvain ×200, take max-Q, consensus
 clustering, across densities 0.008–0.3 and gamma {0.5,1,1.5,2}. Ported in
-`scripts/lib/network.py`.
+`src/funcnet/network.py`.

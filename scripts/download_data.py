@@ -22,10 +22,9 @@ from pathlib import Path
 import requests
 from tqdm import tqdm
 
+from funcnet.paths import RAW_DIR, REFERENCES_DIR as REF_DIR
+
 API = "https://neurodata.riken.jp/api/v3/files/{id}/download/"
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RAW_DIR = PROJECT_ROOT / "data" / "raw"
-REF_DIR = PROJECT_ROOT / "references"
 
 # name -> (file-id, expected size in bytes). example_data first (small, for dev).
 DATA_FILES: dict[str, tuple[str, int]] = {

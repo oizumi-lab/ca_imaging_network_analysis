@@ -52,16 +52,14 @@ from pathlib import Path
 import numpy as np
 from pymatreader import read_mat
 
+from .paths import PROJECT_ROOT, RAW_DIR  # noqa: F401  (re-exported for convenience)
+
 # ----------------------------------------------------------------------------
 # Constants from the dataset metadata
 # ----------------------------------------------------------------------------
 FS_HZ = 7.65            # imaging sampling rate
 PX_TO_UM = 1.465        # micrometres per pixel (3000 um / 2048 px ~= 1.465)
 SMOOTH_FRAMES = 15      # Gaussian smoothing window used to build spike_smoothed
-
-# Repo layout: this file is scripts/lib/dataio.py -> project root is two up.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-RAW_DIR = PROJECT_ROOT / "data" / "raw"
 
 # State-code legend (values found in the ``state`` vector).
 SLEEP_STATE_CODES = {0.0: "awake", 0.5: "quiet_awake", 1.0: "nrem", 2.0: "rem"}
