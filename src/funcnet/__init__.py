@@ -4,10 +4,12 @@ Hands-on toolkit for the neural-data-analysis course: loading the v2.0 dataset
 and computing correlation-based functional networks and modularity across brain
 states (wakefulness, sleep, anesthesia).
 
-Typical use::
+Typical use (from a script run at the project root)::
 
-    from funcnet import dataio, network as net
-    from funcnet.paths import FIG_DIR
+    import sys
+    sys.path.insert(0, ".")  # the package lives in ./src
+    from src.funcnet import dataio, network as net
+    from src.funcnet.paths import FIG_DIR
 
     rec = dataio.load_recording("mouse07_ane")
     C = net.correlation_matrix(dataio.activity(rec, "anesthesia", nonzero_only=True))

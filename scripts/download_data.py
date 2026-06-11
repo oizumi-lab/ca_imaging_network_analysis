@@ -17,12 +17,14 @@ the expected byte size) are skipped, so the script is safe to re-run.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import requests
 from tqdm import tqdm
 
-from funcnet.paths import RAW_DIR, REFERENCES_DIR as REF_DIR
+sys.path.insert(0, ".")  # run from the project root; the package lives in ./src
+from src.funcnet.paths import RAW_DIR, REFERENCES_DIR as REF_DIR
 
 API = "https://neurodata.riken.jp/api/v3/files/{id}/download/"
 

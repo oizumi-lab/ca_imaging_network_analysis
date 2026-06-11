@@ -21,10 +21,10 @@ the analysis in:
 
 ```
 .claude/        project rules & shared settings
-src/funcnet/    installable package: dataio.py (loader), network.py (analysis),
-                paths.py (project paths). Editable-installed by `poetry install`.
+src/funcnet/    the package: dataio.py (loader), network.py (analysis),
+                paths.py (project paths)
 data/raw/       the 11 downloaded .mat recordings  (gitignored, ~11 GB)
-scripts/        Python entry-point scripts (import from funcnet)
+scripts/        Python entry-point scripts (import from src.funcnet)
   download_data.py            fetch the dataset into data/raw/
   00_inspect_data.py          explore one recording
   01_reproduce_example.py     faithful port of the dataset's example_network_analysis.m
@@ -42,11 +42,19 @@ logs/           run logs (downloads, long jobs)
 - **Hands-on scripts are interactive `# %%` cell scripts** (VS Code / Spyder),
   **not** `.ipynb`, and have **no `main()`** — flat top-level cells. Reusable
   logic goes in the `src/funcnet/` package (normal functions).
-- **Imports:** `funcnet` is an editable-installed package (src layout), so scripts
-  just do `from funcnet import dataio, network as net` — no `sys.path` hacks, works
-  from any directory and any machine. Re-run `poetry install` after pulling.
-- **Outputs go to `results/`** (e.g. `from funcnet.paths import FIG_DIR`). Don't
-  write generated files into `scripts/`.
+- **Imports:** the package is **not** installed into the venv. Scripts add the
+  repo root to the path and import it by its explicit location, so it is obvious
+  where the code lives:
+  ```python
+  import sys
+  sys.path.insert(0, ".")  # run from the project root; the package lives in ./src
+  from src.funcnet import dataio, network as net
+  from src.funcnet.paths import FIG_DIR
+  ```
+  **Run scripts from the project root** (`poetry run python scripts/...`), and in
+  VS Code/Spyder keep the interactive working directory at the project root.
+- **Outputs go to `results/`** (e.g. `from src.funcnet.paths import FIG_DIR`).
+  Don't write generated files into `scripts/`.
 - English for all materials.
 - `data/`, `.venv/`, and `results/` are gitignored. Don't commit data or the venv.
 

@@ -9,11 +9,14 @@
 # (RIKEN 20260409-001 v2.0; Kiyooka & Oomoto et al., Cell Reports 2026).
 
 # %%
+import sys
+sys.path.insert(0, ".")  # run from the project root; the package lives in ./src
+
 import numpy as np
 import matplotlib.pyplot as plt
 
-from funcnet import dataio
-from funcnet.paths import FIG_DIR
+from src.funcnet import dataio
+from src.funcnet.paths import FIG_DIR
 
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 

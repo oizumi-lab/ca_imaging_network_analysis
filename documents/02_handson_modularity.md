@@ -96,8 +96,9 @@ reduced information integration when consciousness is lost.
 ## Cheat-sheet (the library API)
 
 ```python
-from funcnet import dataio
-from funcnet import network as net
+import sys
+sys.path.insert(0, ".")  # run from the project root; the package lives in ./src
+from src.funcnet import dataio, network as net
 
 rec  = dataio.load_recording("mouse07_ane")      # v2.0 loader
 X    = dataio.activity(rec, "anesthesia",        # (N, n_frames) for a state

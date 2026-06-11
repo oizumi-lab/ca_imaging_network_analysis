@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [tool.poetry]
-packages = [{ include = "funcnet", from = "src" }]
+package-mode = false
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.29"

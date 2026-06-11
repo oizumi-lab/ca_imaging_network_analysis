@@ -18,12 +18,14 @@
 # faithful to the MATLAB originals in ``oizumi-lab/mouse_network_2P``.
 
 # %%
+import sys
+sys.path.insert(0, ".")  # run from the project root; the package lives in ./src
+
 import numpy as np
 import matplotlib.pyplot as plt
 
-from funcnet import dataio
-from funcnet import network as net
-from funcnet.paths import FIG_DIR
+from src.funcnet import dataio, network as net
+from src.funcnet.paths import FIG_DIR
 
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
