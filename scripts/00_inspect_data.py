@@ -25,12 +25,13 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
 # ## Load a recording
-# We start with ``example_data`` (a 1,000-neuron subsample, ~84 MB) because it
-# loads fast. Swap in any real recording, e.g. ``"mouse01_sleep"`` or
-# ``"mouse07_ane"`` (see ``dataio.list_recordings()``).
+# We use ``mouse01_sleep`` — a full recording with ~7,800 neurons (a sleep
+# session: wakefulness vs NREM). Swap in any other recording, e.g.
+# ``"mouse07_ane"`` for an anesthesia session (see ``dataio.list_recordings()``).
+# A tiny 1,000-neuron subsample ``"example_data"`` also exists for quick tests.
 
 # %%
-rec = dataio.load_recording("example_data")
+rec = dataio.load_recording("mouse01_sleep")
 print(rec)
 print("Available recordings:", dataio.list_recordings(include_example=True))
 

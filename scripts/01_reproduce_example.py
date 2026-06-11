@@ -1,10 +1,14 @@
 # %% [markdown]
 # # 01 · Reproducing the official example pipeline
 #
-# **Goal:** reproduce the dataset's own ``example_network_analysis.m`` (a MATLAB
-# script shipped with the v2.0 data) in Python, and *verify* that each step does
+# **Goal:** port the dataset's own ``example_network_analysis.m`` (a MATLAB
+# script shipped with the v2.0 data) to Python, and *verify* that each step does
 # what the MATLAB code does. This is the trust-building step: once we match the
 # reference, the rest of the hands-on builds on a validated foundation.
+#
+# We run it on a **full recording** (``mouse01_sleep``, ~7,800 neurons). The
+# shipped MATLAB example loads the 1,000-neuron ``example_data.mat`` subsample,
+# but the pipeline is identical — only the input size differs.
 #
 # The reference pipeline is:
 #
@@ -34,10 +38,11 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
 # ## Step 1 — load the same variables the MATLAB example loads
-# `data = load('example_data.mat','spike_smoothed','ROIs');`
+# `data = load('mouse01_sleep.mat','spike_smoothed','ROIs');`  (the example used
+# `example_data.mat`; we use the full recording.)
 
 # %%
-rec = dataio.load_recording("example_data")
+rec = dataio.load_recording("mouse01_sleep")
 spike = rec.spike_smoothed          # MATLAB: data.spike_smoothed   (N × T)
 coords = rec.centroid               # MATLAB: data.ROIs.Centroid    (N × 2)
 N, T = spike.shape
@@ -91,9 +96,11 @@ print(f"Modularity Q = {Q:.4f}   #modules = {net.n_modules(ci)}")
 print(f"independent Q = {Q_indep:.6f}   |Q − Q_indep| = {abs(Q - Q_indep):.2e}")
 assert abs(Q - Q_indep) < 1e-9, "BCT Q disagrees with independent modularity!"
 
-# Distribution of Q across seeds (shows the stochasticity the paper averages out)
-Qs = np.array([net.louvain_modularity(adj, gamma=1.0, seed=s)[1] for s in range(30)])
-print(f"Q over 30 seeds: mean={Qs.mean():.4f}  sd={Qs.std():.4f}  "
+# Distribution of Q across seeds (shows the stochasticity the paper averages out).
+# A handful of runs is enough to see the spread; on ~7,800 neurons each run takes
+# a few seconds, so we use 10 here (raise it for a smoother distribution).
+Qs = np.array([net.louvain_modularity(adj, gamma=1.0, seed=s)[1] for s in range(10)])
+print(f"Q over {Qs.size} seeds: mean={Qs.mean():.4f}  sd={Qs.std():.4f}  "
       f"range=[{Qs.min():.4f}, {Qs.max():.4f}]")
 
 # %% [markdown]

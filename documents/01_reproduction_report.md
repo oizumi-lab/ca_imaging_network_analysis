@@ -24,23 +24,25 @@ Data loading was rewritten for v2.0 in `src/funcnet/dataio.py` (see
 2. **Variable renames + 1-based indices** (e.g. `smoothed_spike`→`spike_smoothed`,
    `frame.used_frame` 1-based → 0-based). Handled in the loader.
 
-## Validation — `scripts/01_reproduce_example.py` on `example_data.mat`
+## Validation — `scripts/01_reproduce_example.py` on `mouse01_sleep.mat`
 
-Reproducing the dataset's official `example_network_analysis.m`
-(`spike_smoothed → corr → densityBasedThresh(K=0.05) → community_louvain(γ=1)`),
-N = 1000 neurons:
+We run the official `example_network_analysis.m` pipeline
+(`spike_smoothed → corr → densityBasedThresh(K=0.05) → community_louvain(γ=1)`)
+on a **full recording** (`mouse01_sleep`, N = 7843 neurons). The shipped MATLAB
+example uses the 1,000-neuron `example_data.mat` subsample; the pipeline is
+identical, only the input size differs.
 
 **Deterministic steps match exactly.**
-- Threshold correlation r = 0.0729.
-- Edges kept = **24,975** = `floor(0.05 · N(N−1)/2)` ✓
+- Threshold correlation r ≈ 0.073.
+- Edges kept = **1,537,620** = `floor(0.05 · N(N−1)/2)` ✓
 - Adjacency is symmetric, binary {0,1}, zero-diagonal ✓
 
 **Modularity is internally consistent.**
-- Louvain (seed 1): **Q = 0.1856**, 9 modules.
-- Independent Newman–Girvan Q on the same partition = 0.185575;
-  `|Q − Q_indep| ≈ 3 × 10⁻¹⁷` ✓ (confirms the BCT wrapper computes the
+- Louvain (seed 1): **Q = 0.1687**, 5 modules.
+- Independent Newman–Girvan Q on the same partition = 0.168697;
+  `|Q − Q_indep| ≈ 8 × 10⁻¹⁶` ✓ (confirms the BCT wrapper computes the
   modularity it claims).
-- Q over 30 random seeds: mean 0.191, sd 0.005 — the expected mild stochasticity
+- Q over 10 random seeds: mean 0.168, sd 0.002 — the expected mild stochasticity
   of Louvain, which the full pipeline removes by taking max-Q over ~200 runs.
 
 ### On "exact" reproduction
