@@ -4,10 +4,10 @@ Hands-on toolkit for the neural-data-analysis course: loading the v2.0 dataset
 and computing correlation-based functional networks and modularity across brain
 states (wakefulness, sleep, anesthesia).
 
-Typical use (from a script run at the project root)::
+Typical use (scripts in scripts/ add the repo root to the path)::
 
-    import sys
-    sys.path.insert(0, ".")  # the package lives in ./src
+    import os, sys
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     from src.funcnet import dataio, network as net
     from src.funcnet.paths import FIG_DIR
 

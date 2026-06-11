@@ -42,12 +42,12 @@ Open the `scripts/*.py` files as **interactive `# %%` cell scripts** in VS Code
 
 Reusable code lives in the `src/funcnet/` package: `dataio.py` (v2.0 loader),
 `network.py` (correlation → threshold → Louvain → modularity), `paths.py`
-(project paths). Scripts import it explicitly so it is clear where it lives —
-**run them from the project root**:
+(project paths). Scripts import it explicitly so it is clear where it lives (the
+path is anchored to the file, so it works from any working directory):
 
 ```python
-import sys
-sys.path.insert(0, ".")  # run from the project root; the package lives in ./src
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.funcnet import dataio, network as net
 ```
 

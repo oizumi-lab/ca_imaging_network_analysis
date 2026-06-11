@@ -18,8 +18,11 @@
 # faithful to the MATLAB originals in ``oizumi-lab/mouse_network_2P``.
 
 # %%
+import os
 import sys
-sys.path.insert(0, ".")  # run from the project root; the package lives in ./src
+
+# add the repo root (parent of scripts/) to the path so `src.funcnet` is importable
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import numpy as np
 import matplotlib.pyplot as plt

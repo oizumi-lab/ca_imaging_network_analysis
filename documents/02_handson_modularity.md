@@ -96,8 +96,8 @@ reduced information integration when consciousness is lost.
 ## Cheat-sheet (the library API)
 
 ```python
-import sys
-sys.path.insert(0, ".")  # run from the project root; the package lives in ./src
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.funcnet import dataio, network as net
 
 rec  = dataio.load_recording("mouse07_ane")      # v2.0 loader

@@ -43,16 +43,16 @@ logs/           run logs (downloads, long jobs)
   **not** `.ipynb`, and have **no `main()`** — flat top-level cells. Reusable
   logic goes in the `src/funcnet/` package (normal functions).
 - **Imports:** the package is **not** installed into the venv. Scripts add the
-  repo root to the path and import it by its explicit location, so it is obvious
-  where the code lives:
+  repo root to the path (anchored to the file, so it works from any working
+  directory) and import it by its explicit location, so it is obvious where the
+  code lives:
   ```python
-  import sys
-  sys.path.insert(0, ".")  # run from the project root; the package lives in ./src
+  import os, sys
+  # add the repo root (parent of scripts/) so `src.funcnet` is importable
+  sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
   from src.funcnet import dataio, network as net
   from src.funcnet.paths import FIG_DIR
   ```
-  **Run scripts from the project root** (`poetry run python scripts/...`), and in
-  VS Code/Spyder keep the interactive working directory at the project root.
 - **Outputs go to `results/`** (e.g. `from src.funcnet.paths import FIG_DIR`).
   Don't write generated files into `scripts/`.
 - English for all materials.

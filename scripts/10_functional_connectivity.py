@@ -14,8 +14,11 @@
 # functional network reorganise between wakefulness and unconsciousness?*
 
 # %%
+import os
 import sys
-sys.path.insert(0, ".")  # run from the project root; the package lives in ./src
+
+# add the repo root (parent of scripts/) to the path so `src.funcnet` is importable
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import warnings
 
