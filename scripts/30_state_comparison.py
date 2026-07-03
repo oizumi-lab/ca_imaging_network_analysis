@@ -35,12 +35,11 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # %% [markdown]
 # ## Settings
 # Defaults are kept light so the whole script runs in ~3–4 minutes. Louvain cost
-# grows with the number of neurons, so for a snappy demo we randomly subsample to
-# ``MAX_NEURONS`` active neurons per recording. **To reproduce the paper more
-# fully:** set ``MAX_NEURONS = None`` (use all neurons), expand the recording
-# lists to all 5 sleep / 4 anesthesia mice, add higher densities (up to 0.30),
-# and raise ``N_RUNS`` toward 200. Subsampling changes the absolute Q values but
-# preserves the awake-vs-unconscious *ordering*, which is the teaching point.
+# grows with the number of neurons, so we randomly subsample to ``MAX_NEURONS``
+# active neurons per recording (~20 min for all recordings). **To reproduce the
+# paper more fully:** set ``MAX_NEURONS = None`` (use all neurons), add higher
+# densities (up to 0.30), and raise ``N_RUNS`` toward 200. Subsampling changes
+# the absolute Q values but preserves the awake-vs-unconscious *ordering*.
 
 # %%
 WINDOW = 1500
@@ -50,8 +49,10 @@ N_WINDOWS = 2       # windows per state (more = smoother estimates)
 GAMMA = 1.0
 MAX_NEURONS = 3000  # random subsample for speed; set None to use all (like the paper)
 
-SLEEP_RECS = ["mouse01_sleep"]   # awake vs NREM   (add more sleep mice to scale up)
-ANE_RECS = ["mouse07_ane"]       # awake vs anesthesia (add more ane mice to scale up)
+# All recordings: 5 sleep mice (mouse 4 recorded on two days) and 4 anesthesia mice.
+SLEEP_RECS = ["mouse01_sleep", "mouse02_sleep", "mouse03_sleep",
+              "mouse04_day1_sleep", "mouse04_day2_sleep", "mouse05_sleep"]
+ANE_RECS = ["mouse03_ane", "mouse05_ane", "mouse06_ane", "mouse07_ane"]
 
 
 # %%

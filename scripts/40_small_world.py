@@ -94,24 +94,24 @@ print("\n→ NREM: higher C, longer L, higher SMN — the unconscious signature.
 # %% [markdown]
 # ## Reproduce the talk figures across all recordings
 # We compute the three summary measures for every 1500-frame window of every
-# recording and both states, then plot them per mouse (awake vs unconscious),
-# reproducing the "Small-worldness" and "path length / clustering" slides.
+# recording and both states — **all 5 sleep mice and all 4 anesthesia mice** —
+# then plot them per mouse, reproducing the "Small-worldness" and
+# "path length / clustering" slides. (Mouse 4 has two sleep sessions, day1 and
+# day2, which are pooled into one "mouse 4" column, as in the talk.)
 #
-# This is the heavy cell. With ``QUICK = True`` it runs on a subset (~4 min);
-# set ``QUICK = False`` (or run with the env var ``SWP_FULL=1``) for the full
-# replication across all 6 sleep + 4 anesthesia recordings (~15 min).
+# This is the heavy cell (~15 min for all recordings). To iterate faster, reduce
+# ``N_SOURCES`` or shorten the recording lists below.
 
 # %%
-QUICK = os.environ.get("SWP_FULL") != "1"
-
 SLEEP_RECS = ["mouse01_sleep", "mouse02_sleep", "mouse03_sleep",
               "mouse04_day1_sleep", "mouse04_day2_sleep", "mouse05_sleep"]
 ANE_RECS = ["mouse03_ane", "mouse05_ane", "mouse06_ane", "mouse07_ane"]
-if QUICK:
-    SLEEP_RECS, ANE_RECS = SLEEP_RECS[:3], ANE_RECS[:2]
-    MAX_WINDOWS = 2
-else:
-    MAX_WINDOWS = None
+MAX_WINDOWS = None      # use every 1500/2900-frame window of each state
+
+# Map each recording to its mouse ID for the per-mouse plot (mouse 4 = day1+day2).
+SLEEP_MOUSE = {"mouse01_sleep": "1", "mouse02_sleep": "2", "mouse03_sleep": "3",
+               "mouse04_day1_sleep": "4", "mouse04_day2_sleep": "4", "mouse05_sleep": "5"}
+ANE_MOUSE = {"mouse03_ane": "1", "mouse05_ane": "2", "mouse06_ane": "3", "mouse07_ane": "4"}
 
 MEASURES = ["sw_ness", "delta_L", "inv_delta_C"]
 MEASURE_LABELS = {"sw_ness": "Small-world-ness",
@@ -161,11 +161,23 @@ ane_data = run_dataset(ANE_RECS, 2900)
 # joined across states. Unconscious (red/orange) sits above awake (blue).
 
 # %%
-def scatter_panel(ax, data, measure, unconscious_color, unconscious_name):
-    names = list(data)
+def regroup_by_mouse(data, mouse_map):
+    """Merge per-recording measures into per-mouse (pools mouse 4's two days)."""
+    grouped = {}
+    for name, states in data.items():
+        g = grouped.setdefault(mouse_map[name], {})
+        for state, vals in states.items():
+            gs = g.setdefault(state, {m: [] for m in MEASURES})
+            for m in MEASURES:
+                gs[m] += vals[m]
+    return grouped
+
+
+def scatter_panel(ax, data, measure, unconscious_color):
+    labels = list(data)
     aw_means, un_means = [], []
-    for x, name in enumerate(names):
-        states = data[name]
+    for x, lab in enumerate(labels):
+        states = data[lab]
         aw = np.array(states["awake"][measure])
         un = np.array(states[list(states)[1]][measure])
         ax.scatter(np.full(aw.size, x) + np.random.uniform(-.08, .08, aw.size), aw,
@@ -173,25 +185,27 @@ def scatter_panel(ax, data, measure, unconscious_color, unconscious_name):
         ax.scatter(np.full(un.size, x) + np.random.uniform(-.08, .08, un.size), un,
                    s=18, color=unconscious_color, zorder=3)
         aw_means.append(aw.mean()); un_means.append(un.mean())
-    xa = len(names)
+    xa = len(labels)
     ax.scatter(np.full(len(aw_means), xa) - .05, aw_means, s=22, color="royalblue", zorder=3)
     ax.scatter(np.full(len(un_means), xa) + .05, un_means, s=22, color=unconscious_color, zorder=3)
-    for a, u in zip(aw_means, un_means):  # connect each mouse's means
+    for a, u in zip(aw_means, un_means):  # connect each mouse's means in the Average column
         ax.plot([xa - .05, xa + .05], [a, u], color="k", lw=.7, zorder=2)
-    ax.set_xticks(list(range(len(names))) + [xa])
-    ax.set_xticklabels([n.replace("mouse", "M").replace("_sleep", "").replace("_ane", "")
-                        for n in names] + ["Avg"], rotation=45, ha="right", fontsize=8)
+    ax.set_xticks(list(range(len(labels))) + [xa])
+    ax.set_xticklabels(labels + ["Avg"], fontsize=9)
+    ax.set_xlabel("Mouse ID")
     ax.set_ylabel(MEASURE_LABELS[measure])
 
 
+sleep_by_mouse = regroup_by_mouse(sleep_data, SLEEP_MOUSE)
+ane_by_mouse = regroup_by_mouse(ane_data, ANE_MOUSE)
+
 fig, axes = plt.subplots(len(MEASURES), 2, figsize=(13, 11))
 for row, measure in enumerate(MEASURES):
-    scatter_panel(axes[row, 0], sleep_data, measure, "crimson", "NREM")
-    scatter_panel(axes[row, 1], ane_data, measure, "goldenrod", "Anesthesia")
+    scatter_panel(axes[row, 0], sleep_by_mouse, measure, "crimson")
+    scatter_panel(axes[row, 1], ane_by_mouse, measure, "goldenrod")
     axes[row, 0].set_title("Wakefulness vs NREM" if row == 0 else "")
     axes[row, 1].set_title("Wakefulness vs Anesthesia" if row == 0 else "")
-fig.suptitle("Small-world metrics are higher during unconsciousness"
-             + ("   [QUICK subset]" if QUICK else ""), y=0.995, fontsize=13)
+fig.suptitle("Small-world metrics are higher during unconsciousness", y=0.995, fontsize=13)
 fig.tight_layout()
 fig.savefig(FIG_DIR / "40_small_world.png", dpi=140)
 plt.show()

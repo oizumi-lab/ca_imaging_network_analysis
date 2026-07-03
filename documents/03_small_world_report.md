@@ -89,8 +89,10 @@ figure. Values are not bit-identical to the talk because the lattice/random
 nulls are stochastic and v2 keeps a superset of neurons, but the magnitudes and
 the awake < unconscious ordering reproduce the slides for **both** datasets.)
 
-Figure: `results/figures/40_small_world.png` — per-mouse scatter, awake vs
-unconscious, for small-world-ness, ΔL, and 1/ΔC (sleep and anesthesia).
+Figure: `results/figures/40_small_world.png` — per-mouse scatter over **all
+recordings** (5 sleep mice — mouse 4's two days pooled — and 4 anesthesia mice),
+awake vs unconscious, for small-world-ness, ΔL, and 1/ΔC, reproducing the two
+talk slides.
 
 ## Performance
 
