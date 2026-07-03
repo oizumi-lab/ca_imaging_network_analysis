@@ -39,10 +39,11 @@ Open the `scripts/*.py` files as **interactive `# %%` cell scripts** in VS Code
 | `10_functional_connectivity.py` | Build correlation-based functional networks per state |
 | `20_modularity.py` | Density thresholding, Louvain modularity, resolution, robustness |
 | `30_state_comparison.py` | **The result:** modularity is higher during sleep/anesthesia |
+| `40_small_world.py` | Path length, clustering coefficient, small-world-ness / SWP |
 
 Reusable code lives in the `src/funcnet/` package: `dataio.py` (v2.0 loader),
-`network.py` (correlation → threshold → Louvain → modularity), `paths.py`
-(project paths). Scripts import it explicitly so it is clear where it lives (the
+`network.py` (correlation → threshold → Louvain → modularity), `smallworld.py`
+(clustering, path length, small-world propensity), `paths.py` (project paths). Scripts import it explicitly so it is clear where it lives (the
 path is anchored to the file, so it works from any working directory):
 
 ```python

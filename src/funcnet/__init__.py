@@ -19,6 +19,6 @@ Typical use (scripts in scripts/ add the repo root to the path)::
 
 from __future__ import annotations
 
-from . import dataio, network, paths
+from . import dataio, network, paths, smallworld
 
-__all__ = ["dataio", "network", "paths"]
+__all__ = ["dataio", "network", "paths", "smallworld"]

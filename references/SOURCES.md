@@ -19,7 +19,15 @@
 - https://github.com/oizumi-lab/mouse_network_2P — full analysis pipeline used in
   the paper. Written for dataset **v1.0**; see `.claude/rules/dataset-v2-format.md`
   for the v1→v2 differences our Python port handles.
+- https://github.com/oizumi-lab/mouse_network — small-world analysis (`kiyooka/SWP/`
+  and `kiyooka/networkComparison/sliding2/characteristic_path_length_w.m`, driver
+  `scripts/script_20251218_calc_small_world.m`). Ported to `src/funcnet/smallworld.py`
+  (script 40); local copies of the `.m` files are in `references/mouse_network_SWP/`.
 - Brain Connectivity Toolbox (the `community_louvain` source): https://sites.google.com/site/bctnet/
+
+## Small-World Propensity method
+- Muldoon, Bridgeford & Bassett (2016), *Small-World Propensity and Weighted
+  Brain Networks*, Sci. Rep. 6:22057. https://arxiv.org/abs/1505.02194
 
 ## Related
 - Dataset video overview: https://youtu.be/Rx8KDJF-d28

@@ -22,7 +22,7 @@ the analysis in:
 ```
 .claude/        project rules & shared settings
 src/funcnet/    the package: dataio.py (loader), network.py (analysis),
-                paths.py (project paths)
+                smallworld.py (path length / clustering / SWP), paths.py
 data/raw/       the 11 downloaded .mat recordings  (gitignored, ~11 GB)
 scripts/        Python entry-point scripts (import from src.funcnet)
   download_data.py            fetch the dataset into data/raw/
@@ -31,6 +31,7 @@ scripts/        Python entry-point scripts (import from src.funcnet)
   10_functional_connectivity.py
   20_modularity.py
   30_state_comparison.py      the lecture result (modularity awake vs sleep/ane)
+  40_small_world.py           path length, clustering, small-world-ness / SWP
 references/     paper/dataset README, Figure_guide, original MATLAB example
 documents/      written walkthrough + reproduction report
 results/        generated outputs — results/figures/ etc. (gitignored)
@@ -93,4 +94,5 @@ variables AND stores `.mat` files as **MATLAB v7.3 (HDF5)**. Consequences:
 - [x] v2.0 loader + network/modularity library
 - [x] Faithful reproduction of `example_network_analysis.m` (validated)
 - [x] Modularity hands-on scripts (00/01/10/20/30)
+- [x] Small-world hands-on (40): path length, clustering, SWP (ports SWP/ from oizumi-lab/mouse_network)
 - [ ] Future analyses (coarse-graining / mesoscale, per-neuron Qi, module stability)
