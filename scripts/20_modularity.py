@@ -35,26 +35,32 @@ warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %%
+# Window length follows the paper: 2900 frames (379 s) for wakefulness-anesthesia
+# recordings, 1500 frames (196 s) for wakefulness-sleep. mouse07_ane is an
+# anesthesia recording, so we use the 2900-frame window here.
+WINDOW = 2900
 rec = dataio.load_recording("mouse07_ane")
 keep = rec.nonzero_ROI if rec.nonzero_ROI is not None else np.ones(rec.n_neurons, bool)
-idx = dataio.state_frames(rec, "awake")[:1500]
+idx = dataio.state_frames(rec, "awake")[:WINDOW]
 X = rec.spike_smoothed[keep][:, idx]
 coords = rec.centroid[keep]
 C = net.correlation_matrix(X)
-print(f"{rec.name}: {X.shape[0]} active neurons, one awake window")
+print(f"{rec.name}: {X.shape[0]} active neurons, one awake window of {len(idx)} frames")
 
 # %% [markdown]
 # ## Why a *fixed density*?
 # A denser graph trivially has more within-module edges, which inflates Q. To
 # compare networks fairly we fix the **connection density** K — the fraction of
 # possible edges we keep — so any Q difference reflects *organisation*, not edge
-# count. Below: the same correlation matrix thresholded at three densities.
+# count. Following the paper, we rank pairs by **absolute** correlation
+# (``negative=True``): a neuron pair is connected if its ``|r|`` is in the top K.
+# Below: the same correlation matrix thresholded at three densities.
 
 # %%
 fig, axes = plt.subplots(1, 3, figsize=(14, 4.6))
 for ax, K in zip(axes, [0.02, 0.05, 0.10]):
-    adj, thr = net.density_threshold(C, K)
-    ci, Q = net.louvain_modularity(adj, gamma=1.0, seed=1)
+    adj, thr = net.density_threshold(C, K, negative=True)
+    ci, Q = net.louvain_modularity(adj, gamma=1.0, seed=1, ci0=net.giant_component_init(adj))
     order = np.argsort(ci)
     ax.imshow(adj[np.ix_(order, order)], cmap="Greys", interpolation="nearest", aspect="equal")
     ax.set_title(f"K = {K:.0%}  (r≥{thr:.2f})\nQ = {Q:.3f}, {net.n_modules(ci)} modules")
@@ -69,10 +75,19 @@ plt.show()
 # Each Louvain run starts from a random order, so Q and the partition wobble.
 # The published pipeline runs Louvain **200×** and keeps the **max-Q** partition
 # (`repeat_louvain`), optionally fusing runs into a **consensus** partition.
+#
+# One subtlety matters for the module *count*: after thresholding some neurons
+# have **degree 0**, and Louvain can never move a degree-0 node. With BCT's
+# default init (every node its own community) each isolated neuron is frozen as
+# its own singleton *module*, wildly inflating the count. Following the paper's
+# `modularity_analysis.m`, `repeat_louvain` warm-starts from a
+# **giant-component partition** (`net.giant_component_init`) that collapses all
+# isolated neurons into one community — so the reported number of modules
+# reflects real structure, not stray singletons.
 
 # %%
 K = 0.05
-adj, thr = net.density_threshold(C, K)
+adj, thr = net.density_threshold(C, K, negative=True)
 res = net.repeat_louvain(adj, gamma=1.0, n_runs=100, seed=12345)
 print(f"Q over 100 runs: mean={res['Q_all'].mean():.4f}  sd={res['Q_all'].std():.4f}")
 print(f"max-Q = {res['Q_max']:.4f}  with {res['n_modules_max']} modules")

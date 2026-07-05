@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import numpy as np
 import bct
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 
 
 # ----------------------------------------------------------------------------
@@ -103,6 +105,35 @@ def density_threshold(
 # ----------------------------------------------------------------------------
 # 3. Modularity / community detection
 # ----------------------------------------------------------------------------
+def giant_component_init(adj: np.ndarray) -> np.ndarray:
+    """Warm-start community vector, port of ``Ci_first`` in ``modularity_analysis.m``.
+
+    Every node **outside** the largest connected component (all isolated /
+    degree-0 nodes and any small components) shares a single community; each node
+    **inside** the giant component starts as its own singleton. Passed to Louvain
+    as the initial partition ``ci``.
+
+    Why this matters: after density thresholding, some neurons have degree 0.
+    Louvain can never move a degree-0 node (``k_i = 0`` -> no move changes Q), so
+    with BCT's default init (``ci = 1..N``, every node its own community) each
+    isolated neuron is frozen as its own singleton *module*, massively inflating
+    the module count. Collapsing them into one shared community — as the paper's
+    code does — is what keeps the reported number of modules meaningful.
+
+    For a connected graph this returns ``1..N`` (identical to BCT's default), so
+    it only changes the result when the thresholded network is disconnected.
+    """
+    N = adj.shape[0]
+    n_comp, labels = connected_components(csr_matrix(adj != 0), directed=False)
+    if n_comp == 1:
+        return np.arange(1, N + 1)
+    largest = int(np.argmax(np.bincount(labels)))
+    conn = labels == largest
+    ci0 = np.ones(N, dtype=int)
+    ci0[conn] = np.arange(2, int(conn.sum()) + 2)
+    return ci0
+
+
 def louvain_modularity(
     W: np.ndarray,
     gamma: float = 1.0,
@@ -126,6 +157,7 @@ def repeat_louvain(
     n_runs: int = 200,
     B: str = "modularity",
     seed: int = 12345,
+    warm_start: bool = True,
 ) -> dict:
     """Run Louvain ``n_runs`` times and keep the max-Q partition.
 
@@ -133,15 +165,23 @@ def repeat_louvain(
     stochastic, so the published pipeline runs it many times (200) and reports
     the highest-Q partition. Returns a dict with the full Q distribution, the
     partition matrix, and the best (max-Q) partition.
+
+    ``warm_start`` (default True) matches ``modularity_analysis.m``: the
+    giant-component initial partition (see :func:`giant_component_init`) is
+    computed once from ``W`` and reused as the init for every run, so isolated
+    nodes don't each become their own module. The per-run randomness comes only
+    from the node-visit order (``seed``), exactly as in the MATLAB code. Set it
+    to False to reproduce BCT's default ``ci = 1..N`` init.
     """
     rng = np.random.RandomState(seed)
     trial_seeds = rng.randint(1, 1_000_000, size=n_runs)
 
     N = W.shape[0]
+    ci0 = giant_component_init(W) if warm_start else None
     Q_all = np.empty(n_runs)
     ci_all = np.empty((N, n_runs), dtype=int)
     for i, s in enumerate(trial_seeds):
-        ci, Q = louvain_modularity(W, gamma=gamma, B=B, seed=int(s))
+        ci, Q = louvain_modularity(W, gamma=gamma, B=B, ci0=ci0, seed=int(s))
         Q_all[i] = Q
         ci_all[:, i] = ci
 
