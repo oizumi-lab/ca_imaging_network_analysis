@@ -39,7 +39,7 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # (~196 s) and keeps only neurons active in that window (``nonzero_ROI``).
 
 # %%
-REC = "mouse07_ane"          # try "mouse01_sleep" for awake-vs-NREM
+REC = "mouse01_sleep"          # try "mouse01_sleep" for awake-vs-NREM
 WINDOW = 1500                # frames per network (paper's setting)
 
 rec = dataio.load_recording(REC)
@@ -88,13 +88,39 @@ plt.show()
 # ## Distribution of pairwise correlations
 # A compact way to compare states: the histogram of off-diagonal correlations.
 # A heavier right tail means more strongly co-active pairs.
+#
+# We also overlay a **shuffle null** (black outline): each neuron's trace is
+# circularly shifted by an independent random lag, which destroys every
+# cross-neuron timing relationship (so *no* real correlation remains) while
+# keeping each neuron's own signal shape. The gap between the real distribution
+# and this null — a heavier right tail and a mean nudged positive — is the
+# genuine co-activity; everything the two curves share is a statistical baseline,
+# not biology. (See the next cell for why that baseline peaks below zero.)
 
 # %%
+def circular_shuffle(X, rng):
+    """Roll each neuron's trace by an independent random lag.
+
+    Destroys all cross-neuron timing (→ no true correlation) while preserving
+    each neuron's own signal shape (sparsity, amplitude distribution). This is
+    the correct null for a correlation distribution: it answers "what would the
+    histogram look like if these exact signals were unrelated?".
+    """
+    out = np.empty_like(X)
+    for i in range(X.shape[0]):
+        out[i] = np.roll(X[i], rng.integers(1, X.shape[1]))
+    return out
+
+rng = np.random.default_rng(0)
+C_null = net.correlation_matrix(circular_shuffle(X_awake, rng))
+
 iu = np.triu_indices(C_awake.shape[0], 1)
 fig, ax = plt.subplots(figsize=(7, 4.5))
 bins = np.linspace(-0.4, 0.6, 80)
 ax.hist(C_awake[iu], bins=bins, alpha=0.55, density=True, label=awake_label)
 ax.hist(C_second[iu], bins=bins, alpha=0.55, density=True, label=second_label)
+ax.hist(C_null[iu], bins=bins, density=True, histtype="step", color="k", lw=1.5,
+        label=f"{awake_label} shuffled (null)")
 ax.axvline(0, color="k", lw=0.7)
 ax.set_xlabel("pairwise correlation r")
 ax.set_ylabel("density")
@@ -104,9 +130,42 @@ fig.tight_layout()
 fig.savefig(FIG_DIR / "10_correlation_hist.png", dpi=140)
 plt.show()
 
-for lab, Cmat in [(awake_label, C_awake), (second_label, C_second)]:
+for lab, Cmat in [(awake_label, C_awake), (second_label, C_second), ("null (shuffled)", C_null)]:
     v = Cmat[iu]
-    print(f"  {lab:<11}: mean r = {v.mean():+.4f}   |  fraction r>0.1 = {(v>0.1).mean():.3f}")
+    print(f"  {lab:<16}: mean r = {v.mean():+.4f}   |  fraction r>0.1 = {(v>0.1).mean():.3f}")
+
+# %% [markdown]
+# ## Why does the peak sit slightly *below* zero?
+# Students always ask this: the most common correlation is a small **negative**
+# value (~−0.03), not zero — yet most neuron pairs are surely unrelated. Nothing
+# is wrong. Notice the shuffle null peaks at the **same** negative value: with
+# every real relationship destroyed, the shape is unchanged. So the negative peak
+# is a property of the **signal shape**, not of the biology (it is *not* evidence
+# of widespread inhibition).
+#
+# The mechanism, in one chain:
+#
+# 1. ``spike_smoothed`` is **sparse and non-negative** — a flat baseline with
+#    occasional positive transients. Each neuron sits near baseline ~90 % of the
+#    time.
+# 2. Pearson r subtracts each neuron's **own mean**. The rare transients pull the
+#    mean up, so after subtraction the trace is **below its mean ~90 % of the
+#    time** (a small negative deviation), spiking positive only during transients.
+# 3. Correlation is dominated by the **large deviations = the transients**. When
+#    neuron A fires, neuron B is (~90 % likely) at baseline — i.e. *below* its
+#    mean → a **negative** deviation. (large +) × (small −) = a **negative**
+#    contribution on exactly the highest-leverage frames.
+# 4. Only when two transients **coincide** do you get (large +)×(large +). For
+#    unrelated neurons that is rare, so a *typical* finite window misses those big
+#    positives and the negatives dominate → **r slightly negative** (the bulk).
+#    The few pairs that catch coincidences form the **long positive tail**.
+# 5. Mean is pinned at ~0 (independence) and the distribution is right-skewed, so
+#    ``mode < median < mean`` — the mode lands below zero.
+#
+# The informative quantity is therefore **not** the peak location but the
+# **excess over the null**: the extra right tail and the positive shift of the
+# mean. That is the real functional connectivity, and it grows as the cortex
+# synchronises in sleep/anesthesia — the subject of the next scripts.
 
 # %% [markdown]
 # ## Takeaway
@@ -115,3 +174,5 @@ for lab, Cmat in [(awake_label, C_awake), (second_label, C_second)]:
 # (modules, hubs), we first turn it into a graph by keeping only the strongest
 # edges — at a **fixed density** so the two states are directly comparable.
 # That is the subject of script ``20_modularity.py``.
+
+# %%
