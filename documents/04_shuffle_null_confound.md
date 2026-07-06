@@ -71,52 +71,57 @@ clearest under anaesthesia.
 `state_difference_cause.py` → `results/figures/oq2_state_difference_cause.png`
 and `oq2_burstiness_examples.png`.
 
-Each "burstiness" statistic is a property of **one neuron's own trace over time**,
-computed per neuron and then averaged over the population — not a cross-neuron or
-spike-rate summary: event rate = event onsets ÷ frames (`spike_deconv`); active
-fraction = fraction of frames with an event; kurtosis = 4th standardised moment of
-the `spike_smoothed` trace; concentration = share of a neuron's activity in its
-top-5% frames; autocorr = lag-1 correlation (the smoothing bump width). The
-`oq2_burstiness_examples.png` figure makes them visible: an event raster (awake
-dense, anaesthesia sparse), example neurons whose smoothed trace goes from many
-small bumps (low kurtosis) to a few tall isolated ones (high kurtosis), and the
-per-neuron population distribution of each statistic.
+The essential variable is **temporal sparsity** — how few and isolated each
+neuron's events are. Each marginal is a per-neuron property of that neuron's own
+trace over time, then averaged (not a cross-neuron summary): event rate = event
+onsets ÷ frames (`spike_deconv`); active fraction = fraction of frames with an
+event; kurtosis = 4th standardised moment of the `spike_smoothed` trace;
+concentration = top-5% activity share; autocorr = lag-1 correlation (smoothing bump
+width). **Kurtosis is not a separate phenomenon — per neuron it is ≈ 1/event-count,
+a proxy for sparsity** (see `sparsity_clustering_mechanism.py`). The
+`oq2_burstiness_examples.png` figure makes the marginals visible (raster, example
+smoothed traces, value distributions, population histograms).
 
 The 15-frame Gaussian smoothing is identical across states, so the confound's
-state difference must come from a marginal the shuffle preserves.
+state difference must come from a marginal the shuffle preserves — and it is
+sparsity.
 
-1. **Unconscious states are sparser and burstier.** Event rate and active-frame
-   fraction fall ~40%; per-neuron kurtosis rises ~70%; concentration rises ~9%.
-   Crucially the trace **autocorrelation is unchanged** (0.9755 → 0.9733) — the
-   smoothing really is identical.
-2. **Kurtosis is the unique predictor.** Across recordings, Δ(shuffle-C) is
-   predicted by Δ(kurtosis) at Spearman ρ ≈ 0.99 (≈0.94 within sleep alone;
-   survives dropping the two extreme-anaesthesia points and a partial correlation
-   controlling for window length). Every other marginal has |ρ| < 0.3.
-3. **Burstiness is causally sufficient.** An independent-signal model with **zero
-   coupling**, matched only to each recording's kurtosis, reproduces the observed
+1. **Unconscious states are sparser.** Event rate and active-frame fraction fall
+   ~40% (the median anaesthesia neuron fires only ~4 events in ~6 min); kurtosis,
+   being ≈ 1/event-count, rises ~70%. The trace **autocorrelation is unchanged**
+   (0.9755 → 0.9733) — the smoothing really is identical.
+2. **Sparsity tracks the confound; kurtosis is just the summary that captures it.**
+   Across recordings, Δ(shuffle-C) is tracked by Δ(kurtosis) at Spearman ρ ≈ 0.99
+   (≈0.94 within sleep alone; survives dropping the two extreme-anaesthesia points
+   and a partial correlation for window length). The *arithmetic-mean* event rate
+   predicts poorly because it is dominated by the busy minority; kurtosis works
+   only because it up-weights the near-silent majority that actually drives the
+   confound.
+3. **Sparsity is causally sufficient.** An independent-signal model with **zero
+   coupling**, matched only to each recording's marginal shape, reproduces
    Δ(shuffle-C) at r ≈ 0.96 — and *over-predicts* the magnitude ~1.5×. A
    coupling-free null producing *more* difference than the data is strong evidence
    that coupling is not needed to explain it.
 
-Nuance: kurtosis is the operative predictor on the **fixed-smoothing manifold** —
-it works precisely because the data hold autocorrelation constant across states.
-Clustering depends on kurtosis *and* smoothing width; kurtosis is not a universal
-sufficient statistic off that manifold. Amplitude/variance is irrelevant
-throughout (Pearson correlation is scale-invariant) — which is why an earlier
-"variance/degree-heterogeneity" explanation was wrong and has been retracted.
+**Why (mechanism, `sparsity_clustering_mechanism.py`):** sparse activity
+concentrates each neuron into few effective frames, so each pairwise correlation is
+dominated by a single coincidental shared frame; a shared frame among three neurons
+is a triangle, so the shuffle graph becomes a union of per-frame coincidence-cliques
+(maximally clustered). In the real shuffle graph the sparsest neurons carry the
+clustering (per-node clustering vs event count, Spearman ≈ −0.93; sparsest quartile
+≈ 0.39 vs busiest ≈ 0.15). Amplitude/variance is irrelevant (Pearson r is
+scale-invariant) — which is why an earlier "variance/degree-heterogeneity"
+explanation was wrong and has been retracted. (Kurtosis also depends on the
+smoothing width, so it is the operative proxy only because smoothing is pinned
+across states.)
 
 Adversarial cross-check: CONFIRMED (all four attacks — circularity, leverage,
 alternative predictors, causal direction — survive).
-
-**Mechanism in one line.** Burstier traces let a few extreme frames dominate each
-pair's correlation, so chance coincidences at those frames create triangle cliques
-→ inflated *local* clustering, with no genuine modules or global shortcuts.
 
 ## Practical takeaway
 
 - Trust **L** (and small-world path-length terms) most, and **Q** for coupling
   claims. Report **C / SWP** as *excess over the shuffle null*, not raw.
-- When comparing clustering across conditions that differ in firing sparsity
-  (states, drugs, cell types), the marginal burstiness alone can move C — control
-  for it.
+- When comparing clustering across conditions that differ in firing **sparsity**
+  (states, drugs, cell types), the sparsity alone can move C — control for event
+  rate, or report C as excess over a per-neuron-preserving shuffle.

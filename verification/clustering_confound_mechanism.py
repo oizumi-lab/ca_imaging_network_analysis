@@ -10,13 +10,15 @@
 # **Result (see the four steps below):**
 # 1. Pearson correlation is **scale-invariant** → a neuron's amplitude/variance is
 #    irrelevant (amplitude heterogeneity changes nothing).
-# 2. The driver is **sparsity / burstiness**: sparse traces make correlations
-#    depend on a few coincident large frames.
+# 2. The driver is **temporal sparsity**: sparse traces make correlations depend
+#    on a few coincident large frames.
 # 3. A single frame where **≥3 neurons are coincidentally large** makes them all
 #    mutually correlated → a **triangle**. Clustering = the prevalence of such
 #    chance coincidence-cliques (not hubs / degree heterogeneity).
-# 4. Unconscious states have **burstier marginals** (higher per-neuron kurtosis),
-#    so they produce more coincidence-cliques → the clustering confound.
+# 4. Unconscious states are **sparser** (most neurons near-silent), so they produce
+#    more coincidence-cliques → the clustering confound. (Per-neuron kurtosis, shown
+#    below, rises only as a proxy for that sparsity — see
+#    ``sparsity_clustering_mechanism.py``.)
 
 # %%
 import os
@@ -97,7 +99,7 @@ print(f"  Gaussian iid (not sparse) clustering={gauss_clus:.3f}  (≈ ER baselin
 
 
 # %% [markdown]
-# ## Step 4 (real data): unconscious marginals are burstier (higher kurtosis)
+# ## Step 4 (real data): unconscious marginals are sparser (kurtosis rises as its proxy)
 
 # %%
 REC = [("mouse05_ane", 2900), ("mouse04_day1_sleep", 1500),
@@ -152,8 +154,8 @@ for i, n in enumerate(names):
 ax[1, 1].set_xticks(xs)
 ax[1, 1].set_xticklabels([n.replace("_sleep", "").replace("mouse", "m").replace("_", "") for n in names],
                          rotation=30, ha="right", fontsize=8)
-ax[1, 1].set_ylabel("mean per-neuron kurtosis (burstiness)")
-ax[1, 1].set_title("(4) Real data: unconscious marginals are burstier\n→ more coincidence-cliques")
+ax[1, 1].set_ylabel("mean per-neuron kurtosis (sparsity proxy)")
+ax[1, 1].set_title("(4) Real data: unconscious is sparser\n→ higher kurtosis → more coincidence-cliques")
 ax[1, 1].legend(fontsize=8)
 
 fig.suptitle("Why independent (shuffled) sparse signals produce high clustering — "

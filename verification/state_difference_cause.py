@@ -8,18 +8,26 @@
 # smoothing is identical across states, so the difference must come from a
 # *marginal* property the shuffle preserves. This script pins it down rigorously:
 #
+# The essential property is **temporal sparsity**: under unconsciousness most
+# neurons fire only a handful of events, and sparse activity inflates the chance
+# clustering (``sparsity_clustering_mechanism.py`` derives *why*, and shows that
+# per-neuron kurtosis is merely a proxy for sparsity, ~ 1/event-count — not an
+# essential variable). This script:
+#
 # 1. **Which marginals differ by state?** Unconscious states are **sparser**
-#    (fewer events) and **burstier** (heavier-tailed traces), while the trace
-#    **autocorrelation is unchanged** — i.e. the smoothing really is identical.
-# 2. **Which marginal predicts the confound?** Across 10 recordings, the shuffle
-#    clustering state-difference is predicted by per-neuron **kurtosis**
-#    (extreme-peak burstiness), Spearman rho ~ 0.99 — and by *no other* marginal.
-#    Event rate / active fraction / concentration are all weak predictors.
-# 3. **Is burstiness sufficient (causal)?** An **independent-signal** model with
-#    zero coupling, matched only to each recording's kurtosis, reproduces the
-#    observed clustering state-difference across recordings (r ~ 0.96). It over-
-#    predicts the magnitude — independent signals produce *more* clustering
-#    difference than the data — so coupling is certainly not needed to explain it.
+#    (fewer events), while the trace **autocorrelation is unchanged** — i.e. the
+#    smoothing really is identical.
+# 2. **Does the sparsity track the confound?** Across 10 recordings the shuffle
+#    clustering state-difference is tracked by per-neuron kurtosis (Spearman
+#    ~ 0.99), used here only as a *tail-weighted summary of sparsity*: it works
+#    where the arithmetic-mean event rate fails, because the confound is set by the
+#    near-silent majority of neurons (which kurtosis up-weights and the mean rate
+#    washes out).
+# 3. **Is sparsity sufficient (causal)?** An **independent-signal** model with zero
+#    coupling, matched only to each recording's marginal shape, reproduces the
+#    clustering state-difference (r ~ 0.96). It over-predicts the magnitude —
+#    independent signals produce *more* clustering difference than the data — so
+#    coupling is certainly not needed to explain it.
 
 # %%
 import os
@@ -43,7 +51,7 @@ warnings.filterwarnings("ignore", message="Mean of empty slice")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 MARG = ["event_rate", "active_frac", "kurtosis", "concentration", "autocorr1"]
-MARG_LBL = ["event\nrate", "active\nfraction", "kurtosis\n(burstiness)",
+MARG_LBL = ["event\nrate", "active\nfraction", "kurtosis\n(sparsity proxy)",
             "activity\nconcentration", "autocorr\n(smoothing)"]
 
 # %%
@@ -248,9 +256,11 @@ fig.savefig(FIG_DIR / "oq2_burstiness_examples.png", dpi=140, bbox_inches="tight
 plt.show()
 
 # %% [markdown]
-# ## Step 2 — which marginal predicts the shuffle-clustering state difference?
-# Spearman (robust to the two extreme-anaesthesia points). Kurtosis dominates; it
-# also holds *within* the sleep group alone, so it is not an anaesthesia artefact.
+# ## Step 2 — which marginal tracks the shuffle-clustering state difference?
+# Spearman (robust to the two extreme-anaesthesia points). Kurtosis tracks it best
+# — as a tail-weighted proxy for sparsity, not as a fundamental variable (see
+# ``sparsity_clustering_mechanism.py``); it also holds *within* the sleep group
+# alone, so it is not an anaesthesia artefact.
 
 # %%
 dC = dshufC(ALL)
@@ -264,12 +274,12 @@ rk_sleep, pk_sleep = stats.spearmanr(dmarg(SLEEP, "kurtosis"), dshufC(SLEEP))
 print(f"  kurtosis, SLEEP only (n=6): rho={rk_sleep:+.2f} (p={pk_sleep:.3g})")
 
 # %% [markdown]
-# ## Step 3 — causal test: an independent-signal model matched only to kurtosis
+# ## Step 3 — causal test: an independent-signal model matched only to the marginal
 # For each recording we simulate ``N`` INDEPENDENT neurons (no coupling), Gaussian-
 # smoothed, at the recording's own window length ``T`` (window length also affects
 # the absolute shuffle clustering), and tune the event rate so the simulated
-# kurtosis matches the measured kurtosis. The simulated clustering is the
-# predicted shuffle-C. Compare predicted vs observed state-difference.
+# marginal shape (its kurtosis, our sparsity proxy) matches the measured one. The
+# simulated clustering is the predicted shuffle-C. Compare predicted vs observed.
 
 # %%
 NSIM, SIG, KK = 1500, 5, 0.05
@@ -340,7 +350,7 @@ axa.axhline(0, color="k", lw=.7)
 axa.set_xticks(range(len(MARG)))
 axa.set_xticklabels(MARG_LBL, fontsize=8)
 axa.set_ylabel("% change (unconscious vs awake)")
-axa.set_title("(a) Unconscious: sparser & burstier,\nsmoothing unchanged", fontsize=11)
+axa.set_title("(a) Unconscious: sparser (fewer events),\nsmoothing unchanged", fontsize=11)
 
 # (b) which marginal predicts ΔshuffleC
 axb = fig.add_subplot(gs[0, 1])
@@ -351,7 +361,7 @@ axb.set_xticks(range(len(MARG)))
 axb.set_xticklabels(MARG_LBL, fontsize=8)
 axb.set_ylabel("|Spearman rho| with Δshuffle-C")
 axb.set_ylim(0, 1)
-axb.set_title("(b) Only kurtosis predicts\nthe clustering confound", fontsize=11)
+axb.set_title("(b) Kurtosis (a sparsity proxy)\ntracks the confound", fontsize=11)
 
 # (c) scatter: ΔshuffleC vs Δkurtosis
 axc = fig.add_subplot(gs[0, 2])
@@ -393,7 +403,7 @@ axe.plot([0, lim], [0, lim], "0.5", ls="--", lw=1, label="y=x")
 axe.set_xlim(0, lim); axe.set_ylim(0, lim)
 axe.set_xlabel("predicted Δ shuffle-C (independent model)")
 axe.set_ylabel("observed Δ shuffle-C")
-axe.set_title(f"(e) Burstiness reproduces the difference\nr={r_rep:.2f} (over-predicts {1/slope:.1f}x)", fontsize=11)
+axe.set_title(f"(e) Sparsity reproduces the difference\nr={r_rep:.2f} (over-predicts {1/slope:.1f}x)", fontsize=11)
 axe.legend(fontsize=8)
 
 # (f) per-recording observed vs predicted ΔshuffleC
@@ -409,34 +419,32 @@ axf.set_ylabel("Δ shuffle-clustering")
 axf.set_title("(f) Per recording", fontsize=11)
 axf.legend(fontsize=8)
 
-fig.suptitle("OQ2 — the clustering confound and its state difference are driven by marginal "
-             "BURSTINESS (kurtosis),\nnot coupling and not a smoothing difference", y=1.0, fontsize=13)
+fig.suptitle("OQ2 — the clustering confound and its state difference are driven by temporal "
+             "SPARSITY (kurtosis is only a proxy for it),\nnot coupling and not a smoothing difference",
+             y=1.0, fontsize=13)
 fig.savefig(FIG_DIR / "oq2_state_difference_cause.png", dpi=140, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
 # ## Conclusion
 # * Under identical smoothing (autocorrelation unchanged, panel a), unconscious
-#   states are **sparser and burstier**. Of every marginal the shuffle preserves,
-#   **per-neuron kurtosis** — heavy-tailed, extreme-peak activity — is the unique
-#   predictor of the clustering confound (panel b/c; Spearman ~0.99 overall, ~0.94
-#   within sleep alone; survives dropping the two extreme-anaesthesia points and a
-#   partial correlation controlling for window length T, rho ~ 0.93-0.96).
-# * **Why kurtosis and not the other burstiness measures:** clustering depends on
-#   kurtosis AND smoothing width (at matched kurtosis, wider smoothing raises C).
-#   Kurtosis is the *operative* predictor here precisely because the data pin the
-#   smoothing width — the autocorrelation is constant across states (panel a). On
-#   that fixed-smoothing manifold, kurtosis→C is tight and monotone; kurtosis is
-#   not a universal sufficient statistic off it. (Within sleep alone, n=6 cannot
-#   fully separate kurtosis from concentration/event-rate; kurtosis is the only
-#   marginal that generalises across sleep, anaesthesia, and the pooled analysis.)
-# * An **independent-signal model** (zero coupling) matched only to that kurtosis
-#   reproduces the observed clustering state-difference across recordings
-#   (r ~ 0.96, panels e/f). It **over-predicts** the magnitude ~1.5×: a coupling-
-#   free null generates *more* clustering difference than the data, so coupling is
-#   certainly not needed to explain it (a coupling-driven effect would make the
-#   null *under*-predict). Window length T also shifts the absolute level (panel
-#   d), which is why the confound looks larger for the longer anaesthesia windows.
-# * Mechanism (see OQ1): burstier traces make a few extreme frames dominate each
-#   pair's correlation, so chance coincidences at those frames create triangle
-#   cliques → inflated *local* clustering, with no genuine modules or shortcuts.
+#   states are **sparser** — most neurons fire only a handful of events. Temporal
+#   **sparsity** is the cause of the clustering confound.
+# * **Kurtosis is not essential — it is a proxy for that sparsity.** Per neuron,
+#   kurtosis ~ 1/event-count, so it up-weights the near-silent majority of cells;
+#   that is why it tracks the confound across recordings (Spearman ~0.99 overall,
+#   ~0.94 within sleep, surviving a partial correlation for window length T) while
+#   the arithmetic-mean event rate — dominated by the busy minority — does not.
+#   ``sparsity_clustering_mechanism.py`` shows the kurtosis≈1/events relation and
+#   the mechanism directly. (Kurtosis also depends on the smoothing width, so it is
+#   the operative proxy only because the smoothing is pinned across states.)
+# * An **independent-signal model** (zero coupling) matched only to the marginal
+#   shape reproduces the clustering state-difference across recordings (r ~ 0.96,
+#   panels e/f), **over-predicting** the magnitude ~1.5× — a coupling-free null
+#   generating *more* difference than the data, so coupling is not needed to
+#   explain it. Window length T shifts the absolute level (panel d), which is why
+#   the confound looks larger for the longer anaesthesia windows.
+# * Mechanism (see ``sparsity_clustering_mechanism.py`` and OQ1): sparse activity
+#   makes a single shared frame dominate each pair's correlation, so chance
+#   coincidences at that frame create triangle cliques → inflated *local*
+#   clustering, with no genuine modules or shortcuts.
