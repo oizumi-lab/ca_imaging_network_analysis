@@ -22,7 +22,8 @@ the analysis in:
 ```
 .claude/        project rules & shared settings
 src/funcnet/    the package: dataio.py (loader), network.py (analysis),
-                smallworld.py (path length / clustering / SWP), paths.py
+                smallworld.py (path length / clustering / SWP),
+                coarsegrain.py (spatial parcels + distance–module profile), paths.py
 data/raw/       the 11 downloaded .mat recordings  (gitignored, ~11 GB)
 scripts/        Python entry-point scripts (import from src.funcnet)
   download_data.py            fetch the dataset into data/raw/
@@ -30,8 +31,23 @@ scripts/        Python entry-point scripts (import from src.funcnet)
   01_reproduce_example.py     faithful port of the dataset's example_network_analysis.m
   10_functional_connectivity.py
   20_modularity.py
-  30_state_comparison.py      the lecture result (modularity awake vs sleep/ane)
+  30_state_comparison.py      the lecture result (modularity awake vs sleep/ane;
+                              per-mouse scatter reproducing the talk slide)
   40_small_world.py           path length, clustering, small-world-ness / SWP
+  50_coarse_grain_modularity.py  mesoscale modularity across spatial scales (paper Fig. 7 B–F)
+  60_module_spatial_distribution.py  where modules sit: single-cell (intermixed) vs mesoscale
+                              (localized) — paper Fig. 5A–C/G/H + Fig. 7F/G/H
+verification/   library cross-checks & method controls (not part of the teaching sequence)
+  50_verify_modularity.py     cross-check modularity vs NetworkX / bctpy / igraph / python-louvain
+  51_verify_smallworld.py     cross-check clustering / path length / SWP vs NetworkX / bctpy
+  shuffle_null_control.py     do awake-vs-unconscious Q/C/L differences survive circular-shift shuffling?
+                              (raw-vs-null per state; L/Q genuine, C confounded)
+  smallworld_shuffle_corrected.py  same shuffle control for the small-world measures (C, L, SWP at K=1%)
+  shuffle_investigation.py    shared per-recording cache of real+shuffle Q/C/L and marginals (→results/cache/)
+  why_QL_robust_C_confounded.py    OQ1: why the shuffle confounds C (~56%) but not Q (~18%) or L (~4%)
+  state_difference_cause.py   OQ2: the C confound is driven by per-neuron kurtosis (burstiness), not coupling
+  clustering_confound_mechanism.py  independent-signal proof: sparsity/coincidence (not amplitude) drives C
+  burstiness_raster.py        raster/burstiness visualisation (awake vs unconscious)
 references/     paper/dataset README, Figure_guide, original MATLAB example
 documents/      written walkthrough + reproduction report
 results/        generated outputs — results/figures/ etc. (gitignored)
@@ -95,4 +111,9 @@ variables AND stores `.mat` files as **MATLAB v7.3 (HDF5)**. Consequences:
 - [x] Faithful reproduction of `example_network_analysis.m` (validated)
 - [x] Modularity hands-on scripts (00/01/10/20/30)
 - [x] Small-world hands-on (40): path length, clustering, SWP (ports SWP/ from oizumi-lab/mouse_network)
-- [ ] Future analyses (coarse-graining / mesoscale, per-neuron Qi, module stability)
+- [x] Library cross-checks (verification/50/51): custom measures validated against NetworkX / bctpy / igraph / python-louvain
+- [x] Mesoscale coarse-graining (script 50): paper Fig. 7 B–F (modularity vs spatial scale)
+- [x] Spatial distribution of modules (script 60): Fig. 5 A–C/G/H + Fig. 7 F/G/H (intermixed vs localized)
+- [x] Shuffle-null confound investigation (verification/): L/Q genuine, C/SWP confounded; C confound driven
+      by per-neuron kurtosis, not coupling (OQ1/OQ2 resolved + adversarially verified; documents/04)
+- [ ] Future analyses (per-neuron Qi, module stability, distance–activity-correlation Fig. 7 I–L)
