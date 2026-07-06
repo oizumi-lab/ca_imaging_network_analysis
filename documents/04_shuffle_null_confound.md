@@ -68,7 +68,19 @@ clearest under anaesthesia.
 
 ## OQ2 — what drives the clustering confound, under identical smoothing?
 
-`state_difference_cause.py` → `results/figures/oq2_state_difference_cause.png`.
+`state_difference_cause.py` → `results/figures/oq2_state_difference_cause.png`
+and `oq2_burstiness_examples.png`.
+
+Each "burstiness" statistic is a property of **one neuron's own trace over time**,
+computed per neuron and then averaged over the population — not a cross-neuron or
+spike-rate summary: event rate = event onsets ÷ frames (`spike_deconv`); active
+fraction = fraction of frames with an event; kurtosis = 4th standardised moment of
+the `spike_smoothed` trace; concentration = share of a neuron's activity in its
+top-5% frames; autocorr = lag-1 correlation (the smoothing bump width). The
+`oq2_burstiness_examples.png` figure makes them visible: an event raster (awake
+dense, anaesthesia sparse), example neurons whose smoothed trace goes from many
+small bumps (low kurtosis) to a few tall isolated ones (high kurtosis), and the
+per-neuron population distribution of each statistic.
 
 The 15-frame Gaussian smoothing is identical across states, so the confound's
 state difference must come from a marginal the shuffle preserves.
