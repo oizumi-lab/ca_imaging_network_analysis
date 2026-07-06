@@ -274,7 +274,14 @@ def small_world_propensity(
         delta_C = min(num_c / (reg_clus - rand_clus), 1.0)
 
     SWP = 1.0 - np.sqrt(delta_C ** 2 + delta_L ** 2) / np.sqrt(2)
-    sw_ness = (net_clus / rand_clus) / (net_path / rand_path)
+    # small-world-ness is undefined when the random null has zero clustering, or a
+    # non-finite path length (a sparse random graph with no triangles / a
+    # disconnected null → rand_path = inf); guard it so SWP (which does not divide
+    # by rand_clus) is still returned.
+    if rand_clus > 0 and net_path > 0 and np.isfinite([net_path, rand_path]).all() and rand_path > 0:
+        sw_ness = (net_clus / rand_clus) / (net_path / rand_path)
+    else:
+        sw_ness = float("nan")
 
     return SWResult(
         SWP=float(SWP), sw_ness=float(sw_ness),

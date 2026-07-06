@@ -25,6 +25,8 @@ package-mode = false
 ipykernel = "^6.29"
 jupytext = "^1.16"
 ruff = "^0.6"
+python-igraph = "^1.0.0"
+python-louvain = "^0.16"
 
 [build-system]
 requires = ["poetry-core>=2.0"]
