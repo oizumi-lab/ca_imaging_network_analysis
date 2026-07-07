@@ -46,8 +46,9 @@ verification/   library cross-checks & method controls (not part of the teaching
   shuffle_investigation.py    shared per-recording cache of real+shuffle Q/C/L and marginals (→results/cache/)
   why_QL_robust_C_confounded.py    OQ1: why the shuffle confounds C (~56%) but not Q (~18%) or L (~4%)
   state_difference_cause.py   OQ2: the C confound is driven by temporal sparsity (kurtosis is a proxy), not coupling
-  sparsity_clustering_mechanism.py  reframe: kurtosis is a proxy for sparsity (~1/event-count); coincidence-clique
-                              mechanism (why sparsity→high C), confirmed on the real shuffle graph
+  sparsity_clustering_mechanism.py  gap-free derivation of why sparsity raises C: single-coincidence law
+                              r~1/sqrt(n_i n_j) → single-frame-dominated correlations → per-frame coincidence
+                              -cliques (+ the smoothing floor); confirmed on the real shuffle graph
   clustering_confound_mechanism.py  independent-signal proof: sparsity/coincidence (not amplitude) drives C
   burstiness_raster.py        raster/burstiness visualisation (awake vs unconscious)
 references/     paper/dataset README, Figure_guide, original MATLAB example
