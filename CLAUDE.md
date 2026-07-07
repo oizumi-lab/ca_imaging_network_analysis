@@ -45,12 +45,11 @@ verification/   library cross-checks & method controls (not part of the teaching
   smallworld_shuffle_corrected.py  same shuffle control for the small-world measures (C, L, SWP at K=1%)
   shuffle_investigation.py    shared per-recording cache of real+shuffle Q/C/L and marginals (→results/cache/)
   why_QL_robust_C_confounded.py    OQ1: why the shuffle confounds C (~56%) but not Q (~18%) or L (~4%)
-  state_difference_cause.py   OQ2: the C confound is driven by temporal sparsity (kurtosis is a proxy), not coupling
+  state_difference_cause.py   OQ2: the C confound is driven by temporal sparsity (fraction of near-silent
+                              neurons predicts it, event-count-matched model reproduces it), not coupling
   sparsity_clustering_mechanism.py  gap-free derivation of why sparsity raises C: single-coincidence law
                               r~1/sqrt(n_i n_j) → single-frame-dominated correlations → per-frame coincidence
                               -cliques (+ the smoothing floor); confirmed on the real shuffle graph
-  clustering_confound_mechanism.py  independent-signal proof: sparsity/coincidence (not amplitude) drives C
-  burstiness_raster.py        raster/burstiness visualisation (awake vs unconscious)
 references/     paper/dataset README, Figure_guide, original MATLAB example
 documents/      written walkthrough + reproduction report
 results/        generated outputs — results/figures/ etc. (gitignored)
@@ -118,6 +117,6 @@ variables AND stores `.mat` files as **MATLAB v7.3 (HDF5)**. Consequences:
 - [x] Mesoscale coarse-graining (script 50): paper Fig. 7 B–F (modularity vs spatial scale)
 - [x] Spatial distribution of modules (script 60): Fig. 5 A–C/G/H + Fig. 7 F/G/H (intermixed vs localized)
 - [x] Shuffle-null confound investigation (verification/): L/Q genuine, C/SWP confounded; C confound driven
-      by temporal sparsity — most neurons near-silent (kurtosis is a proxy), not coupling
-      (OQ1/OQ2 resolved + adversarially verified; documents/04)
+      by temporal sparsity — most neurons near-silent, so chance coincidences form per-frame cliques
+      (mechanism derived + adversarially verified; OQ1/OQ2 resolved; documents/04)
 - [ ] Future analyses (per-neuron Qi, module stability, distance–activity-correlation Fig. 7 I–L)

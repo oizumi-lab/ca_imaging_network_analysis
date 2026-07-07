@@ -6,7 +6,7 @@ Both ``why_QL_robust_C_confounded.py`` (OQ1) and ``state_difference_cause.py``
     * real network measures  Q, C, L   (K = 5 % binary graph, as in script 30)
     * circular-shift **shuffle-null** Q, C, L  (mean + samples per state)
     * per-neuron **marginal** statistics the shuffle preserves
-      (event rate, active-frame fraction, kurtosis, activity concentration,
+      (event rate, active-frame fraction, activity concentration,
        lag-1 autocorrelation)
 
 This module computes them **once** for every recording (same active-neuron
@@ -25,7 +25,6 @@ import warnings
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import numpy as np
-from scipy import stats as sps
 
 from src.funcnet import dataio, network as net, smallworld as sw
 from src.funcnet.paths import PROJECT_ROOT
@@ -98,7 +97,7 @@ def event_rate_lambda(Xdc):
 
 def concentration_top(Xsm, frac=0.05):
     """Mean fraction of a neuron's total smoothed activity held by its top-``frac``
-    most active frames (higher = burstier / sparser)."""
+    most active frames (higher = sparser / more concentrated in time)."""
     Xs = np.sort(Xsm, axis=1)[:, ::-1]
     top = int(np.ceil(frac * Xsm.shape[1]))
     tot = Xsm.sum(1)
@@ -118,7 +117,6 @@ def marginal_stats(Xsm, Xdc):
     return {
         "event_rate": event_rate_lambda(Xdc),
         "active_frac": float(np.mean((Xdc > 0).mean(1))),
-        "kurtosis": float(np.nanmean(sps.kurtosis(Xsm, axis=1, fisher=True))),
         "concentration": concentration_top(Xsm, 0.05),
         "autocorr1": autocorr_lag1(Xsm),
     }
@@ -143,8 +141,7 @@ def compute_recording(name, kind):
         out[label] = {"real": real, "shuf_mean": shuf.mean(0), "shuf_std": shuf.std(0),
                       "shuf": shuf, **marg}
         print(f"  {name} [{label}]: Q/C/L real={real[0]:.3f}/{real[1]:.3f}/{real[2]:.2f}"
-              f"  shufC={shuf[:,1].mean():.3f}  rate={marg['event_rate']:.4f}"
-              f"  kurt={marg['kurtosis']:.0f}", flush=True)
+              f"  shufC={shuf[:,1].mean():.3f}  rate={marg['event_rate']:.4f}", flush=True)
     return out
 
 
@@ -156,7 +153,7 @@ def compute_all():
 
 
 # --- cache I/O (npz of a flattened dict) ------------------------------------
-_SCALAR = ("event_rate", "active_frac", "kurtosis", "concentration", "autocorr1")
+_SCALAR = ("event_rate", "active_frac", "concentration", "autocorr1")
 
 
 def _flatten(results):

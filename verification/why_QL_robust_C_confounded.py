@@ -20,7 +20,7 @@
 #    C — a purely *local* triangle-density measure — is inflated most; L — a
 #    *global* integration measure — least.
 # 2. **Synthetic sensitivity.** In an independent-signal model (zero coupling),
-#    making the signals burstier raises the shuffle C, Q and L above ER, but C
+#    making the signals sparser raises the shuffle C, Q and L above ER, but C
 #    rises fastest and L slowest — the local measure is the most marginal-sensitive.
 # 3. **Mechanism snapshot.** In a real deep-anaesthesia graph vs its shuffle: the
 #    shuffle keeps most of the *local* clustering, but its path length collapses
@@ -130,9 +130,9 @@ order_ok = sum(1 for n in ALL
 print(f"  per-recording ΔShuf ordering L<=Q<=C holds in {order_ok}/10 (cleanest under anaesthesia)")
 
 # %% [markdown]
-# ## Evidence 2 — synthetic sensitivity: burstiness inflates C fastest, L slowest
+# ## Evidence 2 — synthetic sensitivity: sparsity inflates C fastest, L slowest
 # Independent signals (NO coupling), Gaussian-smoothed, thresholded at K=5%. As
-# the event rate falls (burstier), every measure climbs above its Erdos-Renyi
+# the event rate falls (sparser), every measure climbs above its Erdos-Renyi
 # baseline — but the *local* measure C climbs fastest, the *global* measure L
 # barely moves.
 
@@ -258,9 +258,9 @@ for m, s in enumerate(SHORT):
     axc.plot(rates * 100, QCL[:, m] - ER[m], "-o", color=COLORS[s], ms=4, label=s)
 axc.axhline(0, color="0.6", lw=.8)
 axc.invert_xaxis()
-axc.set_xlabel("event rate  (% frames)  ← burstier")
+axc.set_xlabel("event rate  (% frames)  ← sparser")
 axc.set_ylabel("excess over Erdos-Renyi baseline")
-axc.set_title("(c) Burstiness inflates C fastest,\nL slowest (independent signals)", fontsize=11)
+axc.set_title("(c) Sparsity inflates C fastest,\nL slowest (independent signals)", fontsize=11)
 axc.legend(fontsize=9)
 
 fig.suptitle("OQ1 — why the shuffle confounds the LOCAL measure (C) but not the GLOBAL ones (Q, L)",
@@ -297,7 +297,7 @@ plt.show()
 # %% [markdown]
 # ## Conclusion
 # * The naive "Q stays flat / chance-cliques form no communities" guess is
-#   **false**: burstiness inflates the shuffle value of Q and L too (both exceed
+#   **false**: sparsity inflates the shuffle value of Q and L too (both exceed
 #   the ER baseline; panel c).
 # * What is fully robust: the shuffle **over-reproduces C in 10/10 recordings**, a
 #   minority of the Q increase, and almost none of the L increase. Aggregate
@@ -311,7 +311,7 @@ plt.show()
 # * Interpretation (consistent with panels b/c and the module snapshot; an
 #   interpretation the numbers support, not one they prove): the confound tracks
 #   how *local* the measure is. Clustering is a local triangle count — exactly what
-#   chance coincidence-cliques from burstiness create — so it inherits most of the
+#   chance coincidence-cliques from sparsity create — so it inherits most of the
 #   marginal-driven state difference. Path length is a global integration measure
 #   the chance-cliques barely touch (shuffle L stays within ~2-3% of random while
 #   real L is 6-14% above), so its awake->unconscious increase is almost entirely

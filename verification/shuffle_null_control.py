@@ -248,19 +248,20 @@ plt.show()
 # confound to per-neuron **variance/amplitude heterogeneity → degree heterogeneity**.
 # That explanation is **wrong** and has been removed: Pearson correlation is
 # scale-invariant, so a neuron's amplitude/variance cannot affect the correlation
-# graph at all (demonstrated directly in ``clustering_confound_mechanism.py``,
+# graph at all (demonstrated directly in ``sparsity_clustering_mechanism.py``,
 # where sweeping amplitude heterogeneity leaves clustering flat).
 #
 # **What actually drives it** (rigorously established, with adversarial
 # cross-checks, in three companion scripts):
-# * ``clustering_confound_mechanism.py`` — independent (zero-coupling) signals:
-#   the driver is **sparsity/burstiness**, via chance coincidence-cliques at a few
-#   extreme frames; amplitude is irrelevant.
+# * ``sparsity_clustering_mechanism.py`` — the driver is **temporal sparsity**: for
+#   independent (zero-coupling) neurons, a single chance coincidence gives a large
+#   correlation (r ~ 1/√(n_i n_j)), so strong correlations become per-frame
+#   coincidence-cliques → high clustering; amplitude is irrelevant.
 # * ``state_difference_cause.py`` (OQ2) — across the 10 recordings the confound's
-#   awake→unconscious *difference* is predicted by per-neuron **kurtosis**
-#   (Spearman ~0.99), and by no other marginal, while the trace autocorrelation
-#   (smoothing) is unchanged across states. A zero-coupling model matched only to
-#   kurtosis reproduces the difference (r ~ 0.96, over-predicting it) — so coupling
+#   awake→unconscious *difference* is predicted by the **fraction of near-silent
+#   neurons** (Spearman ~0.99), and *not* by the mean event rate, while the trace
+#   autocorrelation (smoothing) is unchanged across states. An event-count-matched
+#   zero-coupling model reproduces the difference pattern (r ~ 0.93) — so coupling
 #   is not needed to generate it.
 # * ``why_QL_robust_C_confounded.py`` (OQ1) — why this hits clustering (local
 #   triangle count) far more than modularity or path length (global measures):

@@ -44,7 +44,7 @@ real, high-effect-size result (ΔL_real ≈ 40× the shuffle sampling noise).
 
 A tempting guess — "chance coincidence-cliques are random, so they inflate local
 triangles (C) but form no communities (Q) or shortcuts (L)" — is **false**: in an
-independent-signal model, making the signals burstier inflates the shuffle value
+independent-signal model, making the signals sparser inflates the shuffle value
 of **all three** measures above the Erdős–Rényi baseline (Q is *not* flat).
 
 The confound is instead set by how **local** each measure is:
@@ -69,51 +69,48 @@ clearest under anaesthesia.
 ## OQ2 — what drives the clustering confound, under identical smoothing?
 
 `state_difference_cause.py` → `results/figures/oq2_state_difference_cause.png`
-and `oq2_burstiness_examples.png`.
+and `oq2_sparsity_raster.png`.
 
-The essential variable is **temporal sparsity** — how few and isolated each
-neuron's events are. Each marginal is a per-neuron property of that neuron's own
-trace over time, then averaged (not a cross-neuron summary): event rate = event
-onsets ÷ frames (`spike_deconv`); active fraction = fraction of frames with an
-event; kurtosis = 4th standardised moment of the `spike_smoothed` trace;
-concentration = top-5% activity share; autocorr = lag-1 correlation (smoothing bump
-width). **Kurtosis is not a separate phenomenon — per neuron it is ≈ 1/event-count,
-a proxy for sparsity** (see `sparsity_clustering_mechanism.py`). The
-`oq2_burstiness_examples.png` figure makes the marginals visible (raster, example
-smoothed traces, value distributions, population histograms).
+The essential variable is **temporal sparsity** — how few events each neuron
+fires. Under unconsciousness most neurons go near-silent (mouse05_ane: median 4
+events in ~6 min, 54% fire fewer than 5), while the trace autocorrelation
+(smoothing) is unchanged. The `oq2_sparsity_raster.png` figure shows the same
+neurons firing far fewer events under anaesthesia.
 
 The 15-frame Gaussian smoothing is identical across states, so the confound's
 state difference must come from a marginal the shuffle preserves — and it is
 sparsity.
 
-1. **Unconscious states are sparser.** Event rate and active-frame fraction fall
-   ~40% (the median anaesthesia neuron fires only ~4 events in ~6 min); kurtosis,
-   being ≈ 1/event-count, rises ~70%. The trace **autocorrelation is unchanged**
+1. **Unconscious states are much sparser.** Event rate and active-frame fraction
+   fall ~40%; the **fraction of near-silent neurons (fire <5)** jumps (~7% → ~26%
+   pooled; mouse05_ane 14% → 54%). The trace **autocorrelation is unchanged**
    (0.9755 → 0.9733) — the smoothing really is identical.
-2. **Sparsity tracks the confound; kurtosis is just the summary that captures it.**
-   Across recordings, Δ(shuffle-C) is tracked by Δ(kurtosis) at Spearman ρ ≈ 0.99
-   (≈0.94 within sleep alone; survives dropping the two extreme-anaesthesia points
-   and a partial correlation for window length). The *arithmetic-mean* event rate
-   predicts poorly because it is dominated by the busy minority; kurtosis works
-   only because it up-weights the near-silent majority that actually drives the
+2. **Sparsity predicts the confound.** Across recordings, Δ(shuffle-C) is predicted
+   by Δ(fraction near-silent) at Spearman ρ ≈ 0.99 (≈0.94 within sleep alone). The
+   *arithmetic-mean* event rate predicts poorly (ρ ≈ −0.27) because it is dominated
+   by the busy minority, not the near-silent majority that actually drives the
    confound.
-3. **Sparsity is causally sufficient.** An independent-signal model with **zero
-   coupling**, matched only to each recording's marginal shape, reproduces
-   Δ(shuffle-C) at r ≈ 0.96 — and *over-predicts* the magnitude ~1.5×. A
-   coupling-free null producing *more* difference than the data is strong evidence
-   that coupling is not needed to explain it.
+3. **Sparsity is causally sufficient.** The observed shuffle-C is already
+   coupling-free, so the confound cannot be coupling. An independent-signal model
+   (**zero coupling**) in which each neuron fires its *measured* number of events
+   reproduces the state-difference **pattern** (r ≈ 0.93); the magnitude is
+   approximate (the single-frame-event model over-predicts sleep and under-predicts
+   deep anaesthesia, where real calcium events span more than one frame). Sparsity
+   alone, no coupling, generates the effect.
 
-**Why (mechanism, `sparsity_clustering_mechanism.py`):** sparse activity
-concentrates each neuron into few effective frames, so each pairwise correlation is
-dominated by a single coincidental shared frame; a shared frame among three neurons
-is a triangle, so the shuffle graph becomes a union of per-frame coincidence-cliques
-(maximally clustered). In the real shuffle graph the sparsest neurons carry the
-clustering (per-node clustering vs event count, Spearman ≈ −0.93; sparsest quartile
-≈ 0.39 vs busiest ≈ 0.15). Amplitude/variance is irrelevant (Pearson r is
-scale-invariant) — which is why an earlier "variance/degree-heterogeneity"
-explanation was wrong and has been retracted. (Kurtosis also depends on the
-smoothing width, so it is the operative proxy only because smoothing is pinned
-across states.)
+**Why (mechanism, `sparsity_clustering_mechanism.py`):** for independent neurons,
+a single chance coincidence gives a Pearson correlation `r ≈ 1/√(n_i·n_j)`, so
+sparse neurons get a large correlation from *one* shared event. Each strong
+correlation is then dominated by a single shared frame, and a shared frame among
+three neurons is a triangle — the shuffle graph becomes a union of per-frame
+coincidence-cliques (maximally clustered), at fixed density. In the real shuffle
+graph the sparsest neurons carry the clustering (per-node clustering vs event
+count, Spearman ≈ −0.93; sparsest quartile ≈ 0.39 vs busiest ≈ 0.15).
+Amplitude/variance is irrelevant (Pearson r is scale-invariant) — which is why an
+earlier "variance/degree-heterogeneity" explanation was wrong and has been
+retracted. (The dense limit does not reach the random value either: Gaussian
+smoothing + finite T leave a clustering floor ~1.5× above Erdős–Rényi, and sparsity
+adds the coincidence-clique excess on top.)
 
 Adversarial cross-check: CONFIRMED (all four attacks — circularity, leverage,
 alternative predictors, causal direction — survive).
