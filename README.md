@@ -41,19 +41,45 @@ Open the `scripts/*.py` files as **interactive `# %%` cell scripts** in VS Code
 | `20_modularity.py` | Density thresholding, Louvain modularity, resolution, robustness |
 | `30_state_comparison.py` | **The result:** modularity is higher during sleep/anesthesia |
 | `40_small_world.py` | Path length, clustering coefficient, small-world-ness / SWP |
+| `50_coarse_grain_modularity.py` | Rebuild modular networks across spatial scales |
+| `60_module_spatial_distribution.py` | Compare intermixed single-cell and localized mesoscale modules |
 
-Reusable code lives in the `src/funcnet/` package: `dataio.py` (v2.0 loader),
-`network.py` (correlation → threshold → Louvain → modularity), `smallworld.py`
-(clustering, path length, small-world propensity), `paths.py` (project paths). Scripts import it explicitly so it is clear where it lives (the
-path is anchored to the file, so it works from any working directory):
+## Reusable package organization
+
+Tutorials keep their settings, narrative orchestration, and one-off figure
+composition in `scripts/`. General functions live in broad, discoverable
+categories under `src/funcnet/`:
+
+| Module | Put reusable functions here when they concern… |
+|---|---|
+| `dataio.py` | v2.0 loading, state lookup, and reproducible neuron-row selection |
+| `timeseries.py` | frame windows, contiguous bouts, acquisition breaks, temporal shuffles, smoothing |
+| `visualization.py` | display binning, state timelines, activity plots, and spatial module maps |
+| `network.py` | correlation networks, density thresholding, Louvain modularity, consensus partitions |
+| `smallworld.py` | clustering, path length, null networks, and small-world propensity |
+| `coarsegrain.py` | spatial parcels and spatial module measures |
+| `statistics.py` | general statistical summaries whose pooling assumptions are explicit |
+| `paths.py` | project input/output paths |
+
+Scripts import these modules explicitly, so readers can immediately locate an
+implementation and future tutorials can extend the appropriate category. The
+path is anchored to the file, so imports work from any working directory:
 
 ```python
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.funcnet import dataio, network as net
+from src.funcnet import dataio, network as net, timeseries as ts
 ```
 
 Generated figures/CSVs go to `results/`.
+
+The reusable helpers have small, data-free regression tests (the large tutorial
+recordings are not needed):
+
+```bash
+poetry run python -m unittest discover -s tests -v
+poetry run ruff check src/funcnet scripts tests
+```
 
 ## Notes
 

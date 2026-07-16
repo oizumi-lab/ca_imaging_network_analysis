@@ -195,6 +195,56 @@ def repeat_louvain(
     }
 
 
+def modularity_from_activity(
+    X: np.ndarray,
+    density: float,
+    gamma: float = 1.0,
+    n_runs: int = 200,
+    negative: bool = True,
+    B: str = "modularity",
+    seed: int = 12345,
+    warm_start: bool = True,
+) -> dict:
+    """Run the standard activity-to-max-Q modularity pipeline.
+
+    This convenience workflow consolidates the sequence repeated throughout the
+    later tutorials: neuron activity → Pearson correlation → fixed-density
+    binary graph → repeated Louvain optimization.  The lower-level functions
+    remain available when a tutorial needs to show or modify an intermediate.
+
+    Parameters
+    ----------
+    X
+        ``(n_nodes, n_frames)`` activity matrix.
+    density
+        Fraction of possible edges retained by :func:`density_threshold`.
+    gamma, n_runs, B, seed, warm_start
+        Passed to :func:`repeat_louvain`.
+    negative
+        If true (the paper's main pipeline), rank correlations by absolute
+        magnitude.  If false, retain the strongest positive correlations.
+
+    Returns
+    -------
+    dict
+        The :func:`repeat_louvain` result plus ``correlation_threshold``.  The
+        full correlation and adjacency matrices are intentionally not retained,
+        which keeps batch analyses from holding unnecessary quadratic arrays.
+    """
+    corr = correlation_matrix(X)
+    adj, threshold = density_threshold(corr, density, negative=negative)
+    result = repeat_louvain(
+        adj,
+        gamma=gamma,
+        n_runs=n_runs,
+        B=B,
+        seed=seed,
+        warm_start=warm_start,
+    )
+    result["correlation_threshold"] = threshold
+    return result
+
+
 def consensus_partition(
     ci_runs: np.ndarray,
     tau: float = 0.0,

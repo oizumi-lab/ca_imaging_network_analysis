@@ -37,7 +37,13 @@ import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.funcnet import dataio, network as net, coarsegrain as cg
+from src.funcnet import (
+    coarsegrain as cg,
+    dataio,
+    network as net,
+    timeseries as ts,
+    visualization as viz,
+)
 from src.funcnet.paths import FIG_DIR
 
 warnings.filterwarnings("ignore", message="invalid value encountered in divide")
@@ -82,34 +88,11 @@ EX_ANE_REC = "mouse05_ane"       # 3210 active neurons -> Anesthesia example
 
 
 # %%
-def neuron_rows(rec, subsample=True):
-    """Active neurons; subsampled to MAX_NEURONS when ``subsample`` (the distance
-    curves), or all active neurons when ``subsample=False`` (the example maps)."""
-    keep = rec.nonzero_ROI if rec.nonzero_ROI is not None else np.ones(rec.n_neurons, bool)
-    rows = np.flatnonzero(keep)
-    if subsample and MAX_NEURONS is not None and rows.size > MAX_NEURONS:
-        rng = np.random.RandomState(0)
-        rows = np.sort(rng.choice(rows, MAX_NEURONS, replace=False))
-    return rows
-
-
-def windows_of(rec, label, width):
-    idx = dataio.state_frames(rec, label)
-    n = min(idx.size // width, N_WINDOWS)
-    return [idx[i * width:(i + 1) * width] for i in range(n)]
-
-
-def max_q_partition(signal, win, n_runs=N_RUNS):
-    """max-Q Louvain module labels for one window of a signal matrix."""
-    C = net.correlation_matrix(signal[:, win])
-    adj, _ = net.density_threshold(C, K, negative=True)   # rank by |r|, as in the paper
-    return net.repeat_louvain(adj, gamma=GAMMA, n_runs=n_runs)["ci_max"]
-
-
 def prepare(name, subsample=True):
     """Load a recording; return per-neuron and per-parcel (nnei=40) signals+coords (µm)."""
     rec = dataio.load_recording(name)
-    rows = neuron_rows(rec, subsample)
+    max_neurons = MAX_NEURONS if subsample else None
+    rows = dataio.select_neuron_rows(rec, max_neurons=max_neurons, seed=0)
     coords = rec.centroid_um[rows]                       # (n, 2) micrometres
     X = rec.spike_smoothed[rows]                         # (n, T)
     idx = cg.close_clustering(coords[:, 0], coords[:, 1], MESO_NNEI)
@@ -125,7 +108,8 @@ def prepare(name, subsample=True):
 # **spatially intermixed**. Bottom row: mesoscale modules form **contiguous
 # patches**. These maps use **all active neurons** of the example mouse (Mouse 5),
 # so the node counts match the paper: 6920 (Awake/NREM) and 3210 (Anesthesia) at
-# single-cell → 173 / 173 / 80 parcels at nnei = 40.
+# single-cell → 173 / 173 / 81 parcels at nnei = 40 with the current remainder
+# handling.
 
 # %%
 def maps_for(name, labels):
@@ -135,16 +119,29 @@ def maps_for(name, labels):
     rec, coords, X, res, pcoords = prepare(name, subsample=False)
     result = {}
     for label in labels:
-        win = windows_of(rec, label, WIN[rec.data_info])[0]
-        result[label] = {"single": (coords, max_q_partition(X, win, n_runs=N_RUNS_MAP)),
-                         "meso": (pcoords, max_q_partition(res, win, n_runs=N_RUNS_MESO))}
+        win = ts.frame_windows(
+            dataio.state_frames(rec, label),
+            WIN[rec.data_info],
+            max_windows=N_WINDOWS,
+        )[0]
+        # The shared network workflow keeps correlation, |r| thresholding, and
+        # repeated-Louvain settings identical at both spatial scales.
+        ci_single = net.modularity_from_activity(
+            X[:, win],
+            density=K,
+            gamma=GAMMA,
+            n_runs=N_RUNS_MAP,
+            negative=True,
+        )["ci_max"]
+        ci_meso = net.modularity_from_activity(
+            res[:, win],
+            density=K,
+            gamma=GAMMA,
+            n_runs=N_RUNS_MESO,
+            negative=True,
+        )["ci_max"]
+        result[label] = {"single": (coords, ci_single), "meso": (pcoords, ci_meso)}
     return result
-
-
-def plot_map(ax, coords, ci, title, s):
-    ax.scatter(coords[:, 0], coords[:, 1], c=ci % 20, cmap="tab20", s=s, edgecolor="k", lw=.2)
-    ax.set_aspect("equal"); ax.invert_yaxis(); ax.set_xticks([]); ax.set_yticks([])
-    ax.set_title(f"{title}\n{len(np.unique(ci))} modules, {len(ci)} nodes", fontsize=9)
 
 
 sleep_maps = maps_for(EX_SLEEP_REC, ["awake", "nrem"])
@@ -156,12 +153,20 @@ EX = [("awake", "Awake", sleep_maps),
 
 fig, axes = plt.subplots(2, 3, figsize=(13, 8.6))
 for col, (label, title, mp) in enumerate(EX):
-    plot_map(axes[0, col], *mp[label]["single"], title, s=6)
-    plot_map(axes[1, col], *mp[label]["meso"], title, s=42)
+    viz.plot_spatial_modules(
+        axes[0, col], *mp[label]["single"], title=title, node_size=6
+    )
+    viz.plot_spatial_modules(
+        axes[1, col], *mp[label]["meso"], title=title, node_size=42
+    )
+    axes[0, col].title.set_fontsize(9)
+    axes[1, col].title.set_fontsize(9)
 axes[0, 0].set_ylabel("single-cell\n(Fig. 5A–C)", fontsize=11)
 axes[1, 0].set_ylabel(f"mesoscale nnei={MESO_NNEI}\n(Fig. 7F)", fontsize=11)
 for ax in (axes[0, 0], axes[1, 0]):   # re-enable the y-label we use as a row header
-    ax.set_axis_on(); ax.set_xticks([]); ax.set_yticks([])
+    ax.set_axis_on()
+    ax.set_xticks([])
+    ax.set_yticks([])
 fig.suptitle("Module assignment maps: single-cell modules are intermixed, "
              "mesoscale modules are localized", y=1.0, fontsize=13)
 fig.tight_layout()
@@ -181,9 +186,26 @@ def recording_profiles(name, width):
     rec, coords, X, res, pcoords = prepare(name)
     out = {label: {"single": [], "meso": []} for label in rec.state_labels}
     for label in rec.state_labels:
-        for win in windows_of(rec, label, width):
-            ci_s = max_q_partition(X, win)
-            ci_m = max_q_partition(res, win)
+        windows = ts.frame_windows(
+            dataio.state_frames(rec, label),
+            width,
+            max_windows=N_WINDOWS,
+        )
+        for win in windows:
+            ci_s = net.modularity_from_activity(
+                X[:, win],
+                density=K,
+                gamma=GAMMA,
+                n_runs=N_RUNS,
+                negative=True,
+            )["ci_max"]
+            ci_m = net.modularity_from_activity(
+                res[:, win],
+                density=K,
+                gamma=GAMMA,
+                n_runs=N_RUNS,
+                negative=True,
+            )["ci_max"]
             out[label]["single"].append(cg.same_module_by_distance(coords, ci_s, DIST_EDGES))
             out[label]["meso"].append(cg.same_module_by_distance(pcoords, ci_m, DIST_EDGES))
         print(f"  {name} [{label}]: {len(out[label]['single'])} window(s)", flush=True)
@@ -214,14 +236,18 @@ def per_mouse_profiles(prof, mouse_map, state, scale):
 
 def plot_profile(ax, prof, mouse_map, unconscious, scale, unc_color, unc_name):
     xs = np.arange(len(DIST_LABELS))
+    plotted = []
     for curves, color in [(per_mouse_profiles(prof, mouse_map, "awake", scale), "royalblue"),
                           (per_mouse_profiles(prof, mouse_map, unconscious, scale), unc_color)]:
         for c in curves:
             ax.plot(xs, c, "-o", color=color, ms=4, lw=1, alpha=.85)
-    ax.set_xticks(xs); ax.set_xticklabels(DIST_LABELS, rotation=45, ha="right", fontsize=8)
+            plotted.append(c)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(DIST_LABELS, rotation=45, ha="right", fontsize=8)
     ax.set_xlabel("cortical distance (µm)")
     ax.set_ylabel("proportion of pairs\nin the same module")
-    ax.set_ylim(0, 0.8)
+    observed_max = np.nanmax(np.vstack(plotted)) if plotted else 0.8
+    ax.set_ylim(0, min(1.0, max(0.8, observed_max * 1.05)))
     ax.plot([], [], "-o", color="royalblue", label="Wakefulness")
     ax.plot([], [], "-o", color=unc_color, label=unc_name)
     ax.legend(fontsize=8)
@@ -254,3 +280,6 @@ plt.show()
 #
 # So whether the cortex looks "parcellated into local regions" depends entirely
 # on the spatial scale of observation — the paper's core multi-scale conclusion.
+# The farthest-distance bins contain fewer pairs and sometimes rebound, so these
+# profiles are descriptive until accompanied by pair counts, spatial/label nulls,
+# and partition-stability uncertainty.

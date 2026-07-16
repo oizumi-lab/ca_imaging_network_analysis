@@ -5,8 +5,9 @@
 # The circular-shift shuffle destroys all coupling but keeps each neuron's own
 # (sparse) trace, and the thresholded correlation graph is *still* highly clustered
 # — more so for the sparser unconscious states. This script explains exactly why,
-# for **independent** (zero-coupling) neurons, and confirms it on real data. Every
-# step is checked numerically (adversarially verified).
+# for **independent** (zero-coupling) neurons, and checks for the corresponding
+# association in shuffled real data. Every step is checked numerically
+# (adversarially verified).
 #
 # ## The question, answered
 # *Does sparsity increase the correlations themselves, or only the chance of
@@ -211,9 +212,10 @@ for a in np.where(adjd.sum(1) >= 2)[0]:
 tstar = int(np.argmax(sum(Xc_d[tri[i]] * Xc_d[tri[j]] for i, j in [(0, 1), (0, 2), (1, 2)])))
 
 # %% [markdown]
-# ## Part 4 — STEP confirmed on REAL data: sparse neurons carry the clustering
+# ## Part 4 — corresponding association in shuffled REAL data
 # In the actual circular-shuffle graph, a node's clustering falls with how many
-# events it fired.
+# events it fired. This is consistent with the independent-signal mechanism; it
+# is not an additive decomposition of the observed awake–unconscious difference.
 
 # %%
 recc = dataio.load_recording("mouse05_ane")
@@ -222,12 +224,14 @@ realC = {}
 print("\nPart 4 — real shuffle graph (mouse05_ane): per-node clustering vs event count")
 for lab in recc.state_labels:
     fr = dataio.state_frames(recc, lab)[:si.WIN["ane"]]
+    runs = si.contiguous_runs(fr)
     Xsm = recc.spike_smoothed[np.ix_(rows, fr)]
     dc = recc.spike_deconv[np.ix_(rows, fr)]
     ev = dc > 0
     k = (ev[:, 1:] & ~ev[:, :-1]).sum(1) + ev[:, :1].sum(1)
     adj, _ = net.density_threshold(
-        net.correlation_matrix(si.circular_shuffle(Xsm, np.random.default_rng(0))), K, negative=True)
+        net.correlation_matrix(si.circular_shuffle(Xsm, np.random.default_rng(0), runs)),
+        K, negative=True)
     cc = sw.clustering_coef(adj)
     mnode = adj.sum(1) >= 2
     rho = stats.spearmanr(k[mnode], cc[mnode]).correlation
@@ -307,19 +311,21 @@ plt.show()
 
 # %% [markdown]
 # ## Conclusion
-# * **Sparsity is the cause.** It raises the correlation from a *single* chance
-#   coincidence (`r ≈ 1/√(n_i n_j)`, step 1), so each strong correlation is
-#   dominated by one shared frame (step 2), the strong edges become transitive
-#   per-frame coincidence-cliques (step 3), and cliques are maximally clustered at
-#   fixed density (step 4). Confirmed on real data (panel E) and immune to
-#   amplitude (panel F).
+# * **Sparsity is sufficient to inflate the zero-coupling null baseline.** In the
+#   independent-signal simulation, it raises the correlation from a *single*
+#   chance coincidence (`r ≈ 1/√(n_i n_j)`, step 1), so strong correlations
+#   become dominated by shared frames and form coincidence-cliques (steps 2–4).
+#   The shuffled real-data association in panel E is consistent with that null
+#   mechanism, and the amplitude control in panel F rules out simple rescaling.
 # * **It is the arrangement, not the count.** Density is fixed by thresholding;
 #   sparsity does not add edges, it makes them clique-structured. Dense activity
 #   does not reach the random value either — a smoothing/finite-T floor sits ~1.5×
 #   above Erdős–Rényi, and sparsity adds the clique **excess** on top of it.
-# * This is a genuine null-model property of sparse activity: the circular shuffle
-#   preserves each neuron's sparsity, so it preserves this inflated clustering —
-#   which is exactly why C is confounded in the awake-vs-unconscious comparison,
-#   while the global measures Q and L (which need coherent modules / shortcuts, not
-#   local cliques) are not. See ``why_QL_robust_C_confounded.py`` (OQ1) and
-#   ``state_difference_cause.py`` (OQ2).
+# * This is a genuine null-model property of sparse activity: a within-bout
+#   circular shuffle preserves each neuron's sparsity and therefore its potential
+#   for an inflated clustering baseline. It shows why raw C is not directly
+#   comparable across states with different sparsity. It does **not** show that
+#   the null difference is an additive causal component of the observed state
+#   effect, nor that subtracting it yields an unbiased corrected effect. See
+#   ``why_QL_robust_C_confounded.py`` (OQ1) and ``state_difference_cause.py``
+#   (OQ2).

@@ -25,7 +25,7 @@ import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 
-from src.funcnet import dataio, network as net
+from src.funcnet import dataio, network as net, timeseries as ts
 from src.funcnet.paths import FIG_DIR
 
 warnings.filterwarnings("ignore", message="invalid value encountered in divide")
@@ -34,15 +34,15 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # %% [markdown]
 # ## Choose a recording
 # Use a real recording so the two states are biologically meaningful. We pick an
-# anesthesia session (awake vs anesthesia); ``mouse01_sleep`` would give awake
-# vs NREM instead. The paper estimates each network from a **1500-frame window**
-# (~196 s) and keeps only neurons active in that window (``nonzero_ROI``).
+# sleep session (awake vs NREM); ``mouse05_ane`` gives awake vs anesthesia.
+# The paper uses **1500-frame sleep windows** and **2900-frame anesthesia
+# windows**, with the corresponding activity-filtered neurons (``nonzero_ROI``).
 
 # %%
-REC = "mouse01_sleep"          # try "mouse01_sleep" for awake-vs-NREM
-WINDOW = 1500                # frames per network (paper's setting)
+REC = "mouse01_sleep"          # try "mouse05_ane" for awake-vs-anesthesia
 
 rec = dataio.load_recording(REC)
+WINDOW = {"sleep": 1500, "ane": 2900}[rec.data_info]
 print(rec)
 awake_label, second_label = rec.state_labels
 print(f"Comparing:  '{awake_label}'  vs  '{second_label}'")
@@ -54,14 +54,14 @@ print(f"Comparing:  '{awake_label}'  vs  '{second_label}'")
 # (essential for a fair comparison).
 
 # %%
-keep = rec.nonzero_ROI if rec.nonzero_ROI is not None else np.ones(rec.n_neurons, bool)
+rows = dataio.select_neuron_rows(rec)
 
 def window_activity(label):
     idx = dataio.state_frames(rec, label)[:WINDOW]
-    return rec.spike_smoothed[keep][:, idx]
+    return rec.spike_smoothed[np.ix_(rows, idx)], idx
 
-X_awake = window_activity(awake_label)
-X_second = window_activity(second_label)
+X_awake, awake_idx = window_activity(awake_label)
+X_second, _second_idx = window_activity(second_label)
 print(f"awake window : {X_awake.shape}")
 print(f"{second_label} window : {X_second.shape}")
 
@@ -89,30 +89,21 @@ plt.show()
 # A compact way to compare states: the histogram of off-diagonal correlations.
 # A heavier right tail means more strongly co-active pairs.
 #
-# We also overlay a **shuffle null** (black outline): each neuron's trace is
-# circularly shifted by an independent random lag, which destroys every
-# cross-neuron timing relationship (so *no* real correlation remains) while
-# keeping each neuron's own signal shape. The gap between the real distribution
-# and this null — a heavier right tail and a mean nudged positive — is the
-# genuine co-activity; everything the two curves share is a statistical baseline,
-# not biology. (See the next cell for why that baseline peaks below zero.)
+# We also overlay a **shuffle null** (black outline): within each contiguous
+# state bout, every neuron's trace is circularly shifted by an independent lag.
+# This disrupts most zero-lag cross-neuron timing while preserving each neuron's
+# own signal shape and never moving samples across a gap. The gap between the
+# real distribution and this null — a heavier right tail and a mean nudged
+# positive — is the shared timing beyond this particular null; it is not by
+# itself proof of direct neuron-neuron coupling. (See the next cell for why the
+# baseline peaks below zero.)
 
 # %%
-def circular_shuffle(X, rng):
-    """Roll each neuron's trace by an independent random lag.
-
-    Destroys all cross-neuron timing (→ no true correlation) while preserving
-    each neuron's own signal shape (sparsity, amplitude distribution). This is
-    the correct null for a correlation distribution: it answers "what would the
-    histogram look like if these exact signals were unrelated?".
-    """
-    out = np.empty_like(X)
-    for i in range(X.shape[0]):
-        out[i] = np.roll(X[i], rng.integers(1, X.shape[1]))
-    return out
-
+# The reusable shuffle lives in ``timeseries.py``. It detects gaps in
+# ``awake_idx`` and rolls each neuron separately within each contiguous bout, so
+# samples never cross a state-epoch discontinuity.
 rng = np.random.default_rng(0)
-C_null = net.correlation_matrix(circular_shuffle(X_awake, rng))
+C_null = net.correlation_matrix(ts.circular_shuffle(X_awake, awake_idx, rng))
 
 iu = np.triu_indices(C_awake.shape[0], 1)
 fig, ax = plt.subplots(figsize=(7, 4.5))
@@ -163,9 +154,9 @@ for lab, Cmat in [(awake_label, C_awake), (second_label, C_second), ("null (shuf
 #    ``mode < median < mean`` — the mode lands below zero.
 #
 # The informative quantity is therefore **not** the peak location but the
-# **excess over the null**: the extra right tail and the positive shift of the
-# mean. That is the real functional connectivity, and it grows as the cortex
-# synchronises in sleep/anesthesia — the subject of the next scripts.
+# **excess over the specified null**: the extra right tail and positive mean
+# shift. This is evidence of shared timing relative to that null, not a calibrated
+# estimate of biological coupling.
 
 # %% [markdown]
 # ## Takeaway

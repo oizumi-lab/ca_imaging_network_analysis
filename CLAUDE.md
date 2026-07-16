@@ -21,14 +21,19 @@ the analysis in:
 
 ```
 .claude/        project rules & shared settings
-src/funcnet/    the package: dataio.py (loader), network.py (analysis),
-                smallworld.py (path length / clustering / SWP),
-                coarsegrain.py (spatial parcels + distance–module profile), paths.py
+src/funcnet/    reusable package, organized by broad domain:
+                dataio.py (loading/state/neuron selection)
+                timeseries.py (windows/segments/shuffles/smoothing)
+                visualization.py (display preparation + plotting)
+                network.py and smallworld.py (network measures/workflows)
+                coarsegrain.py (spatial parcels + spatial module measures)
+                statistics.py (general summaries), paths.py (project paths)
 data/raw/       the 11 downloaded .mat recordings  (gitignored, ~11 GB)
 scripts/        Python entry-point scripts (import from src.funcnet)
   download_data.py            fetch the dataset into data/raw/
   00_inspect_data.py          explore one recording
   01_reproduce_example.py     faithful port of the dataset's example_network_analysis.m
+  02_visualization_activity.py  full-session ΔF/F timelines and spike rasters
   10_functional_connectivity.py
   20_modularity.py
   30_state_comparison.py      the lecture result (modularity awake vs sleep/ane;
@@ -59,8 +64,9 @@ logs/           run logs (downloads, long jobs)
 ## Conventions
 
 - **Hands-on scripts are interactive `# %%` cell scripts** (VS Code / Spyder),
-  **not** `.ipynb`, and have **no `main()`** — flat top-level cells. Reusable
-  logic goes in the `src/funcnet/` package (normal functions).
+  **not** `.ipynb`. Reusable logic goes in the broad domain modules under
+  `src/funcnet/`; tutorial-specific settings, orchestration, and teaching cells
+  remain in `scripts/`. Avoid an undifferentiated `utils.py`.
 - **Imports:** the package is **not** installed into the venv. Scripts add the
   repo root to the path (anchored to the file, so it works from any working
   directory) and import it by its explicit location, so it is obvious where the

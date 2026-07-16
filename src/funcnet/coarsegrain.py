@@ -100,6 +100,39 @@ def same_module_by_distance(coords, ci, edges=(500.0, 1000.0, 1500.0, 2000.0, 25
     return out
 
 
+def module_localization_index(coords: np.ndarray, ci: np.ndarray) -> float:
+    """Nearest-neighbour module agreement relative to chance.
+
+    For every node, find its spatially nearest other node and measure how often
+    the pair shares a module.  Divide that observed agreement by the chance
+    probability ``sum((module_count / n_nodes) ** 2)``.  Values above one
+    indicate that modules are more spatially localized than the label-frequency
+    baseline.
+
+    Parameters
+    ----------
+    coords
+        ``(N, 2)`` node or parcel coordinates in any consistent spatial unit.
+    ci
+        ``(N,)`` module labels aligned with ``coords``.
+    """
+    coords = np.asarray(coords, dtype=float)
+    ci = np.asarray(ci)
+    if coords.ndim != 2 or coords.shape[1] != 2:
+        raise ValueError("coords must have shape (n_nodes, 2)")
+    if ci.ndim != 1 or ci.size != coords.shape[0]:
+        raise ValueError("ci must contain one module label per coordinate")
+    if ci.size < 2:
+        raise ValueError("at least two nodes are required")
+
+    distances = squareform(pdist(coords))
+    np.fill_diagonal(distances, np.inf)
+    nearest = np.argmin(distances, axis=1)
+    _, counts = np.unique(ci, return_counts=True)
+    chance = np.sum((counts / ci.size) ** 2)
+    return float(np.mean(ci[nearest] == ci) / chance)
+
+
 def coarse_grain(X: np.ndarray, x, y, idx: np.ndarray):
     """Average signals and centroids within each parcel (port of ``spatial_coarse_graining.m``).
 

@@ -41,10 +41,16 @@ import warnings
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import stats
 from scipy.spatial.distance import pdist, squareform
 
-from src.funcnet import dataio, network as net, coarsegrain as cg
+from src.funcnet import (
+    coarsegrain as cg,
+    dataio,
+    network as net,
+    statistics as stat_utils,
+    timeseries as ts,
+    visualization as viz,
+)
 from src.funcnet.paths import FIG_DIR
 
 warnings.filterwarnings("ignore", message="invalid value encountered in divide")
@@ -55,8 +61,8 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # Defaults are kept light so the script runs in a few minutes. The heavy scale is
 # `nnei = 1` (thousands of nodes); coarser scales shrink the graph and run fast.
 # **To reproduce the paper more fully:** set `MAX_NEURONS = None`, raise `N_RUNS`
-# toward 200, and raise `N_WINDOWS`. Subsampling changes absolute Q but preserves
-# the awake-vs-unconscious ordering and its collapse with coarse-graining.
+# toward 200, and raise `N_WINDOWS`. Subsampling can change both absolute Q and
+# the state contrast, especially when only a few parcels remain.
 
 # %%
 SCALES = [1, 2, 5, 10, 20, 40, 80, 160]   # nnei: neurons per parcel (1 = single cell)
@@ -86,32 +92,17 @@ FMAP_ANE_REC = "mouse05_ane"
 
 
 # %%
-def windows_of(rec, label, width):
-    """Up to ``N_WINDOWS`` non-overlapping ``width``-frame windows of a state."""
-    idx = dataio.state_frames(rec, label)
-    n = min(idx.size // width, N_WINDOWS)
-    return [idx[i * width:(i + 1) * width] for i in range(n)]
-
-
-def neuron_rows(rec):
-    """Active neurons, optionally subsampled (seeded, same set across all scales)."""
-    keep = rec.nonzero_ROI if rec.nonzero_ROI is not None else np.ones(rec.n_neurons, bool)
-    rows = np.flatnonzero(keep)
-    if MAX_NEURONS is not None and rows.size > MAX_NEURONS:
-        rng = np.random.RandomState(0)
-        rows = np.sort(rng.choice(rows, MAX_NEURONS, replace=False))
-    return rows
-
-
 def recording_measures(name, width):
     """Max-Q per (state, scale, window) for one recording.
 
-    Returns ``out`` where ``out[label][nnei] = [Q per window]``. (The panel-F
-    module maps are computed separately by :func:`module_map`, since they use the
-    paper's consensus clustering on all active neurons.)
+    Returns ``out`` where ``out[label][nnei] = [Q per window]``. The panel-F
+    module maps are computed separately by :func:`module_map`, since they use
+    all active neurons and many more Louvain runs. Consensus is an optional
+    supplementary-analysis setting rather than the main-figure default.
     """
     rec = dataio.load_recording(name)
-    rows = neuron_rows(rec)
+    # One seeded selection is reused by both states and every spatial scale.
+    rows = dataio.select_neuron_rows(rec, max_neurons=MAX_NEURONS, seed=0)
     X = rec.spike_smoothed[rows]                  # (n, T) smoothed spikes
     x, y = rec.centroid[rows, 0], rec.centroid[rows, 1]
     D = squareform(pdist(np.column_stack([x, y])))   # reuse across scales
@@ -122,10 +113,19 @@ def recording_measures(name, width):
         res, xp, yp = cg.coarse_grain(X, x, y, idx)
         print(f"  {name}: nnei={s:>3}  ->  {res.shape[0]} parcels", flush=True)
         for label in rec.state_labels:
-            for win in windows_of(rec, label, width):
-                C = net.correlation_matrix(res[:, win])
-                adj, _ = net.density_threshold(C, K, negative=True)   # rank by |r|
-                r = net.repeat_louvain(adj, gamma=GAMMA, n_runs=N_RUNS)
+            windows = ts.frame_windows(
+                dataio.state_frames(rec, label),
+                width,
+                max_windows=N_WINDOWS,
+            )
+            for win in windows:
+                r = net.modularity_from_activity(
+                    res[:, win],
+                    density=K,
+                    gamma=GAMMA,
+                    n_runs=N_RUNS,
+                    negative=True,
+                )
                 out[label][s].append(r["Q_max"])
     return out
 
@@ -168,25 +168,6 @@ def per_mouse_means(data, mouse_map, unconscious_label):
     return mice, awake, unc
 
 
-def ci95(diff_mat):
-    """Per-scale mean and 95% CI across mice (two-tailed one-sample t-test).
-
-    Uses the per-scale count of mice with valid (non-NaN) data, so a scale where
-    some mouse is missing a window gets the correct df — matching MATLAB ``ttest``,
-    which ignores NaNs. Scales with fewer than 2 valid mice get a NaN interval.
-    """
-    m = np.nanmean(diff_mat, axis=0)
-    n_valid = np.sum(~np.isnan(diff_mat), axis=0)
-    lo = np.full_like(m, np.nan)
-    hi = np.full_like(m, np.nan)
-    for j in range(diff_mat.shape[1]):
-        if n_valid[j] > 1:
-            sem = np.nanstd(diff_mat[:, j], ddof=1) / np.sqrt(n_valid[j])
-            tcrit = stats.t.ppf(0.975, n_valid[j] - 1)
-            lo[j], hi[j] = m[j] - tcrit * sem, m[j] + tcrit * sem
-    return m, lo, hi
-
-
 sleep_mice, sleep_aw, sleep_un = per_mouse_means(sleep_data, SLEEP_MOUSE, "nrem")
 ane_mice, ane_aw, ane_un = per_mouse_means(ane_data, ANE_MOUSE, "anesthesia")
 
@@ -195,7 +176,8 @@ ane_mice, ane_aw, ane_un = per_mouse_means(ane_data, ANE_MOUSE, "anesthesia")
 # ## Figure 1 — modularity vs spatial scale (panels B–E)
 # Left column: modularity of both states per scale (awake ×, unconscious ○, with
 # mean lines). Right column: the awake−unconscious modularity **difference** with
-# its 95 % CI — the gap collapses toward zero as parcels grow.
+# its 95 % CI. The contrast may weaken, reverse, or become imprecise as the graph
+# shrinks; CI overlap with zero is not an equivalence test.
 
 # %%
 def plot_modularity_scale(ax, awake_mat, unc_mat, unc_label, unc_color):
@@ -204,7 +186,8 @@ def plot_modularity_scale(ax, awake_mat, unc_mat, unc_label, unc_color):
     ax.plot(xs, unc_mat.T, "o", color=unc_color, ms=4, mec="k", mew=.3, ls="none")
     ax.plot(xs, np.nanmean(awake_mat, 0), "-", color="royalblue", lw=2, label="Wakefulness")
     ax.plot(xs, np.nanmean(unc_mat, 0), "-", color=unc_color, lw=2, label=unc_label)
-    ax.set_xticks(xs); ax.set_xticklabels(SCALES)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(SCALES)
     ax.set_xlabel("parcel size  nnei  (neurons/parcel)")
     ax.set_ylabel("modularity  Q  (K = 5%)")
     ax.legend(fontsize=8)
@@ -213,12 +196,14 @@ def plot_modularity_scale(ax, awake_mat, unc_mat, unc_label, unc_color):
 def plot_diff_scale(ax, awake_mat, unc_mat, unc_label):
     xs = np.arange(len(SCALES))
     diff = awake_mat - unc_mat
-    m, lo, hi = ci95(diff)
+    # Student-t interval with a separate non-NaN mouse count at each scale.
+    m, lo, hi = stat_utils.mean_confidence_interval(diff, axis=0)
     ax.fill_between(xs, lo, hi, color="0.85", label="95% CI")
     ax.plot(xs, diff.T, "o", color="k", ms=3, ls="none")
     ax.plot(xs, m, "-", color="k", lw=2, label="mean across mice")
     ax.axhline(0, color="0.5", lw=1)
-    ax.set_xticks(xs); ax.set_xticklabels(SCALES)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(SCALES)
     ax.set_xlabel("parcel size  nnei  (neurons/parcel)")
     ax.set_ylabel(f"ΔQ   (awake − {unc_label})")
     ax.legend(fontsize=8)
@@ -233,8 +218,8 @@ axes[0, 0].set_title("(B) Wakefulness vs NREM")
 axes[0, 1].set_title(f"(C) modularity difference  (n = {len(sleep_mice)} mice)")
 axes[1, 0].set_title("(D) Wakefulness vs Anesthesia")
 axes[1, 1].set_title(f"(E) modularity difference  (n = {len(ane_mice)} mice)")
-fig.suptitle("Mesoscale modularity across spatial scales — the state gap collapses "
-             "with coarse-graining", y=1.01, fontsize=13)
+fig.suptitle("Mesoscale modularity across spatial scales — state contrast and uncertainty",
+             y=1.01, fontsize=13)
 fig.tight_layout()
 fig.savefig(FIG_DIR / "50_coarse_grain_modularity_BCDE.png", dpi=140, bbox_inches="tight")
 plt.show()
@@ -266,38 +251,22 @@ def module_map(name, label, width, nnei=FMAP_SCALE, n_runs=FMAP_N_RUNS):
     Returns ``(x_parcel, y_parcel, ci)`` or ``None`` if the state is too short.
     """
     rec = dataio.load_recording(name)
-    keep = rec.nonzero_ROI if rec.nonzero_ROI is not None else np.ones(rec.n_neurons, bool)
-    rows = np.flatnonzero(keep)
+    rows = dataio.select_neuron_rows(rec)  # all active rows; no map subsampling
     x, y = rec.centroid[rows, 0], rec.centroid[rows, 1]
     idx = cg.close_clustering(x, y, nnei)
     res, xp, yp = cg.coarse_grain(rec.spike_smoothed[rows], x, y, idx)
     fr = dataio.state_frames(rec, label)
     if fr.size < width:
         return None
-    C = net.correlation_matrix(res[:, fr[:width]])
-    adj, _ = net.density_threshold(C, K, negative=True)
-    r = net.repeat_louvain(adj, gamma=GAMMA, n_runs=n_runs)
+    r = net.modularity_from_activity(
+        res[:, fr[:width]],
+        density=K,
+        gamma=GAMMA,
+        n_runs=n_runs,
+        negative=True,
+    )
     ci = net.consensus_partition(r["ci_all"]) if USE_CONSENSUS else r["ci_max"]
     return xp, yp, ci
-
-
-def localization_index(xp, yp, ci):
-    """How much more often a parcel's nearest neighbour shares its module vs chance."""
-    D = squareform(pdist(np.column_stack([xp, yp])))
-    np.fill_diagonal(D, np.inf)
-    nn = np.argmin(D, axis=1)
-    _, cnt = np.unique(ci, return_counts=True)
-    chance = np.sum((cnt / ci.size) ** 2)
-    return float(np.mean(ci[nn] == ci) / chance)
-
-
-def plot_module_map(ax, entry, title):
-    xp, yp, ci = entry
-    ax.scatter(xp, yp, c=ci % 20, cmap="tab20", s=40, edgecolor="k", lw=.3)
-    ax.set_aspect("equal"); ax.invert_yaxis()
-    ax.set_xticks([]); ax.set_yticks([])
-    ax.set_title(f"{title}\n{len(np.unique(ci))} modules, {len(ci)} parcels, "
-                 f"localization {localization_index(xp, yp, ci):.1f}×")
 
 
 panels = [
@@ -308,11 +277,27 @@ panels = [
 fig, axes = plt.subplots(1, 3, figsize=(15, 5.2))
 for ax, (entry, title) in zip(axes, panels):
     if entry is not None:
-        plot_module_map(ax, entry, title)
+        xp, yp, ci = entry
+        coords = np.column_stack([xp, yp])
+        localization = cg.module_localization_index(coords, ci)
+        map_title = (
+            f"{title}\n{np.unique(ci).size} modules, {ci.size} parcels, "
+            f"localization {localization:.1f}×"
+        )
+        viz.plot_spatial_modules(
+            ax,
+            coords,
+            ci,
+            title=map_title,
+            node_size=40,
+            show_counts=False,
+            edge_linewidth=0.3,
+        )
     else:
         ax.set_axis_off()
 fig.suptitle(f"(F) Spatial distribution of coarse-grained modules  "
-             f"(nnei = {FMAP_SCALE}, K = 5%, {'consensus' if USE_CONSENSUS else 'max-Q of 200 runs'})"
+             f"(nnei = {FMAP_SCALE}, K = 5%, "
+             f"{'consensus' if USE_CONSENSUS else f'max-Q of {FMAP_N_RUNS} runs'})"
              f" — modules are spatially localized", y=1.02, fontsize=13)
 fig.tight_layout()
 fig.savefig(FIG_DIR / "50_coarse_grain_modules_F.png", dpi=140, bbox_inches="tight")
@@ -320,26 +305,26 @@ plt.show()
 
 
 # %% [markdown]
-# ## Numeric summary: where does the state gap vanish?
-# The first scale at which the 95 % CI of the awake−unconscious difference
-# includes zero (i.e. states become statistically indistinguishable).
+# ## Numeric summary: where does the CI first overlap zero?
+# This is a descriptive uncertainty threshold, not evidence that the states are
+# equivalent or that the effect has vanished.
 
 # %%
 for name, aw, un in [("SLEEP (awake−NREM)", sleep_aw, sleep_un),
                      ("ANESTHESIA (awake−anesthesia)", ane_aw, ane_un)]:
-    m, lo, hi = ci95(aw - un)
+    m, lo, hi = stat_utils.mean_confidence_interval(aw - un, axis=0)
     crossed = next((SCALES[i] for i in range(len(SCALES)) if lo[i] <= 0 <= hi[i]), None)
     print(f"{name}:")
     for i, s in enumerate(SCALES):
         star = "  <- CI includes 0" if lo[i] <= 0 <= hi[i] else ""
         print(f"   nnei={s:>3}:  ΔQ={m[i]:+.3f}  [{lo[i]:+.3f}, {hi[i]:+.3f}]{star}")
-    print(f"   -> gap first non-significant at nnei = {crossed}\n")
+    print(f"   -> CI first includes zero at nnei = {crossed} (not an equivalence test)\n")
 
 # %% [markdown]
 # ## Takeaway
 # At the **single-cell** scale the unconscious network is more modular (scripts
-# 20/30). As we **coarse-grain** into mesoscale parcels, that difference
-# **collapses toward zero**, and modules become **spatially localized** — so the
-# state-dependent segregation seen with single-cell resolution is *not* visible at
-# the coarser scales probed by fMRI/EEG. This is the paper's central
-# multi-scale message (Fig. 7).
+# 20/30). At modest coarse-graining the contrast weakens and its interval first
+# overlaps zero, while modules become **spatially localized**. At the coarsest
+# scales only a handful of parcels/edges remain, and the contrast can reverse;
+# those estimates are discrete and unstable. The scale dependence is therefore
+# descriptive rather than proof that the state effect vanishes (Fig. 7).

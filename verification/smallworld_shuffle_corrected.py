@@ -1,18 +1,18 @@
 # %% [markdown]
-# # Shuffle-corrected small-world measures (C, L, SWP)
+# # Temporal-null-calibrated small-world measures (C, L, SWP)
 #
 # Companion to ``shuffle_null_control.py``, for the **small-world** pipeline of
 # script 40 (correlation → ``|r|`` → **K = 1 %** binary graph → largest connected
 # component → clustering C, path length L, small-world propensity SWP).
 #
-# It reports each measure as **excess over the circular-shift shuffle null**,
+# It reports each measure as **excess over a within-bout temporal null**,
 # separately for each state:
 #
-#     M_corrected(state) = M_real(state) − mean(M_shuffle(state))
+#     M_excess(state) = M_real(state) − mean(M_null(state))
 #
-# and asks whether the awake-vs-unconscious difference survives the correction —
-# i.e. whether the small-world signatures (higher C, longer L, higher SWP during
-# unconsciousness) are genuine or reproduced by time-shuffled data.
+# This is a conditional benchmark, not an additive correction or a causal split
+# between firing marginals and coupling. In particular, raw C and SWP should not
+# be compared across states with strongly different firing sparsity.
 
 # %%
 import os
@@ -28,6 +28,11 @@ from scipy import stats
 
 from src.funcnet import dataio, network as net, smallworld as sw
 from src.funcnet.paths import FIG_DIR
+from verification.shuffle_investigation import (
+    aggregate_by_mouse,
+    circular_shuffle,
+    contiguous_runs,
+)
 
 warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -56,14 +61,6 @@ def neuron_rows(rec):
     return rows
 
 
-def circular_shuffle(X, rng):
-    out = np.empty_like(X)
-    T = X.shape[1]
-    for i in range(X.shape[0]):
-        out[i] = np.roll(X[i], int(rng.integers(1, T)))
-    return out
-
-
 def sw_measures(corr, rng):
     """(clustering, path length, SWP) of the 1%-density small-world network."""
     r = sw.sw_summary(corr, density=DENSITY, n_sources=N_SOURCES, rng=rng)
@@ -76,10 +73,11 @@ def analyze(name, width):
     out = {"unc_label": rec.state_labels[1]}
     for label in rec.state_labels:
         win = dataio.state_frames(rec, label)[:width]
+        runs = contiguous_runs(win)
         X = rec.spike_smoothed[rows][:, win]
         real = sw_measures(net.correlation_matrix(X), np.random.RandomState(0))
         rng = np.random.default_rng(SEED)
-        shuf = np.array([sw_measures(net.correlation_matrix(circular_shuffle(X, rng)),
+        shuf = np.array([sw_measures(net.correlation_matrix(circular_shuffle(X, rng, runs)),
                                      np.random.RandomState(100 + s)) for s in range(N_SHUFFLE)])
         out[label] = {"orig": real, "shuf": shuf}
         print(f"  {name} [{label}]: C/L/SWP real = {real[0]:.3f}/{real[1]:.3f}/{real[2]:.3f}"
@@ -108,7 +106,8 @@ def raw_panel(ax, recs, m):
     for i, name in enumerate(recs):
         r = results[name]
         for j, (lab, color) in enumerate([("awake", "royalblue"), (r["unc_label"], "crimson")]):
-            d = r[lab]; pos = i * 3 + j
+            d = r[lab]
+            pos = i * 3 + j
             ax.boxplot([d["shuf"][:, m]], positions=[pos], widths=.7, showfliers=False,
                        patch_artist=True, boxprops=dict(facecolor=color, alpha=.25, edgecolor=color),
                        medianprops=dict(color=color), whiskerprops=dict(color=color),
@@ -117,7 +116,8 @@ def raw_panel(ax, recs, m):
                     markeredgecolor="k", markeredgewidth=.4)
         ticks.append(i * 3 + .5)
         labels.append(name.replace("_sleep", "").replace("mouse", "m").replace("_", ""))
-    ax.set_xticks(ticks); ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
     ax.set_ylabel(SW_MEASURES[m])
     ax.plot([], [], "*", color="royalblue", label="Awake real")
     ax.plot([], [], "s", color="royalblue", alpha=.3, label="Awake shuffle")
@@ -129,7 +129,8 @@ fig, axes = plt.subplots(3, 2, figsize=(15, 12))
 for m in range(3):
     raw_panel(axes[m, 0], SLEEP_RECS, m)
     raw_panel(axes[m, 1], ANE_RECS, m)
-axes[0, 0].set_title("SLEEP (awake vs NREM)"); axes[0, 1].set_title("ANESTHESIA (awake vs anesthesia)")
+axes[0, 0].set_title("SLEEP (awake vs NREM)")
+axes[0, 1].set_title("ANESTHESIA (awake vs anesthesia)")
 axes[0, 0].legend(fontsize=8, ncol=2, loc="best")
 fig.suptitle("Small-world measures (K=1%): raw (★) vs shuffle null (box), per state — no subtraction",
              y=1.0, fontsize=13)
@@ -139,27 +140,31 @@ plt.show()
 
 
 # %% [markdown]
-# ## Shuffle-corrected state comparison
-# ``ΔM_real`` vs ``ΔM_shuffle`` and the shuffle-corrected difference, per measure.
+# ## State comparison relative to the within-bout temporal null
+# ``ΔM_real`` vs ``ΔM_null`` and their excess, per measure.
 
 # %%
 def summary(recs, kind_label):
     print("\n" + "=" * 78)
-    print(f"Small-world, shuffle-corrected  [{kind_label}]")
+    print(f"Small-world, within-bout temporal-null benchmark  [{kind_label}]")
     print("=" * 78)
     for m, mname in enumerate(SW_MEASURES):
         # within-state z (real vs shuffle), and the state difference
         z = [(results[n][lab]["orig"][m] - results[n][lab]["shuf"][:, m].mean())
              / results[n][lab]["shuf"][:, m].std() for n in recs for lab in ("awake", results[n]["unc_label"])]
-        rd = np.array([results[n][results[n]["unc_label"]]["orig"][m] - results[n]["awake"]["orig"][m] for n in recs])
-        sd = np.array([(results[n][results[n]["unc_label"]]["shuf"][:, m]
-                        - results[n]["awake"]["shuf"][:, m]).mean() for n in recs])
+        rd = aggregate_by_mouse(
+            [results[n][results[n]["unc_label"]]["orig"][m] - results[n]["awake"]["orig"][m]
+             for n in recs], recs)
+        sd = aggregate_by_mouse(
+            [(results[n][results[n]["unc_label"]]["shuf"][:, m]
+              - results[n]["awake"]["shuf"][:, m]).mean() for n in recs], recs)
         excess = rd - sd
         t, p = stats.ttest_1samp(excess, 0.0)
         frac = np.nanmean(sd) / np.nanmean(rd) * 100 if np.nanmean(rd) else np.nan
         print(f"  {mname:16s}: within-state |z| real vs shuffle = {np.nanmean(np.abs(z)):5.1f}")
-        print(f"  {'':16s}  ΔM_real={np.mean(rd):+.4f}  ΔM_shuffle={np.mean(sd):+.4f} ({frac:+.0f}% of real)"
-              f"  corrected={np.mean(excess):+.4f} (t={t:+.2f}, p={p:.3g}, n={len(rd)})")
+        print(f"  {'':16s}  ΔM_real={np.mean(rd):+.4f}  ΔM_null={np.mean(sd):+.4f}"
+              f" (null/raw={frac:+.0f}%, descriptive)  excess={np.mean(excess):+.4f}"
+              f" (t={t:+.2f}, nominal p={p:.3g}, n={len(rd)} mice)")
 
 
 summary(SLEEP_RECS, "SLEEP: awake vs NREM")
@@ -167,9 +172,9 @@ summary(ANE_RECS, "ANESTHESIA: awake vs anesthesia")
 
 
 # %% [markdown]
-# ## Figure — shuffle-corrected difference per measure
-# ★ = ΔM_real; box = ΔM_shuffle. ★ well outside the box ⇒ the small-world state
-# difference is genuine, not reproduced by time-shuffled data.
+# ## Figure — observed and temporal-null differences per measure
+# ★ = ΔM_real; box = ΔM_null. Their separation is conditional on this null and
+# should not be interpreted as a causal decomposition.
 
 # %%
 def diff_panel(ax, recs, m, title):
@@ -183,14 +188,17 @@ def diff_panel(ax, recs, m, title):
     ax.set_xticks(range(len(recs)))
     ax.set_xticklabels([n.replace("_sleep", "").replace("mouse", "m").replace("_", "") for n in recs],
                        rotation=45, ha="right", fontsize=8)
-    ax.set_ylabel(f"Δ {SW_MEASURES[m]}"); ax.set_title(title, fontsize=10); ax.legend(fontsize=8)
+    ax.set_ylabel(f"Δ {SW_MEASURES[m]}")
+    ax.set_title(title, fontsize=10)
+    ax.legend(fontsize=8)
 
 
 fig, axes = plt.subplots(3, 2, figsize=(14, 12))
 for m in range(3):
     diff_panel(axes[m, 0], SLEEP_RECS, m, "SLEEP" if m == 0 else "")
     diff_panel(axes[m, 1], ANE_RECS, m, "ANESTHESIA" if m == 0 else "")
-fig.suptitle("Small-world state differences: real (★) vs shuffle null (box)", y=1.0, fontsize=13)
+fig.suptitle("Small-world state differences: real (★) vs within-bout temporal null (box)",
+             y=1.0, fontsize=13)
 fig.tight_layout()
 fig.savefig(FIG_DIR / "smallworld_shuffle_state_difference.png", dpi=140, bbox_inches="tight")
 plt.show()

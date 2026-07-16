@@ -1,12 +1,12 @@
 # %% [markdown]
-# # OQ1 — Why does the shuffle confound clustering (C) but not modularity (Q)
-# #        or path length (L)?
+# # OQ1 — Why does the temporal null reproduce clustering (C) more than
+# #        modularity (Q) or path length (L)?
 #
-# The circular-shift shuffle destroys all cross-neuron coupling but preserves each
-# neuron's own trace. Earlier work established that the awake -> unconscious
-# **state difference** in C is largely reproduced by shuffled data (a confound),
-# while Q and L are not. This script asks *why*, rigorously, and corrects an
-# intuitive-but-wrong guess along the way.
+# The circular-shift null disrupts cross-neuron timing while preserving each
+# neuron's own trace. Earlier work found that this specified null reproduces more
+# of the awake -> unconscious **state difference** in C than in Q or L. This script
+# asks *why* and corrects an intuitive-but-wrong guess along the way. The
+# null-reproduced ratio used below is descriptive; it is not a causal decomposition.
 #
 # **Wrong guess (falsified below):** "chance coincidence-cliques are random, so
 # they inflate local triangles (C) but form no communities (Q) and no shortcuts
@@ -15,16 +15,17 @@
 # flat.
 #
 # **What is actually true (three independent lines of evidence):**
-# 1. **Confound is a matter of degree, set by locality.** Fraction of the real
-#    state-difference reproduced by the shuffle: **L 4%  <  Q 18%  <  C 56%**.
+# 1. **Null sensitivity is set partly by locality.** The descriptive fraction of
+#    the real state difference reproduced by the null is largest for C and smallest
+#    for L in these data.
 #    C — a purely *local* triangle-density measure — is inflated most; L — a
 #    *global* integration measure — least.
 # 2. **Synthetic sensitivity.** In an independent-signal model (zero coupling),
 #    making the signals sparser raises the shuffle C, Q and L above ER, but C
 #    rises fastest and L slowest — the local measure is the most marginal-sensitive.
 # 3. **Mechanism snapshot.** In a real deep-anaesthesia graph vs its shuffle: the
-#    shuffle keeps most of the *local* clustering, but its path length collapses
-#    to the random value (no genuine shortcuts) and its modularity comes from many
+#    shuffle keeps much of the *local* clustering, but its path length approaches
+#    the random value and its modularity comes from many
 #    small scattered chance-cliques rather than a few large coherent modules.
 
 # %%
@@ -55,12 +56,15 @@ COLORS = {"Q": "#1f77b4", "C": "#d62728", "L": "#2ca02c"}
 # %% [markdown]
 # ## Load the per-recording cache (real + shuffle Q/C/L, marginals)
 # Built by ``shuffle_investigation.py`` (same neuron subsample, window and density
-# K=5% across states). Delete ``results/cache/shuffle_investigation.npz`` to force
-# a recompute.
+# K=5% across states). Its manifest automatically invalidates results made with
+# the older concatenated global-roll null.
 
 # %%
 R = si.load_or_compute()
 SLEEP, ANE, ALL = si.SLEEP_RECS, si.ANE_RECS, si.SLEEP_RECS + si.ANE_RECS
+MOUSE = {name: name for name in ALL}
+MOUSE["mouse04_day1_sleep"] = "mouse04_sleep"
+MOUSE["mouse04_day2_sleep"] = "mouse04_sleep"
 
 
 def unc(n):
@@ -79,55 +83,70 @@ def dshuf(recs, m):
     return np.array([unc(n)["shuf"][:, m].mean() - aw(n)["shuf"][:, m].mean() for n in recs])
 
 
+def at_mouse_level(recs, values):
+    """Average repeated recording days before protocol-specific inference."""
+    mice = [MOUSE[n] for n in recs]
+    order = list(dict.fromkeys(mice))
+    values = np.asarray(values, dtype=float)
+    return np.array([values[np.array(mice) == mouse].mean() for mouse in order])
+
+
 # %% [markdown]
-# ## Evidence 1 — the confound is set by how *local* the measure is
+# ## Evidence 1 — null sensitivity is set partly by how *local* the measure is
 # For each measure, the fraction of the real awake->unconscious difference the
-# shuffle reproduces. C (local) >> Q > L (global).
+# specified shuffle null reproduces. This is a descriptive ratio, not a causal
+# confound percentage. C (local) is more null-sensitive than Q and L (global).
 
 # %%
 print("=" * 76)
-print("Confound fraction  =  mean(dM_shuffle) / mean(dM_real)")
+print("Null-reproduced ratio  =  mean(dM_null) / mean(dM_real)  [descriptive]")
 print("=" * 76)
 frac_tbl = {}
-for grp, recs in [("SLEEP", SLEEP), ("ANE", ANE), ("ALL", ALL)]:
+for grp, recs in [("SLEEP", SLEEP), ("ANE", ANE)]:
     frac_tbl[grp] = {}
     for m, s in enumerate(SHORT):
-        dr, ds = dreal(recs, m), dshuf(recs, m)
+        dr = at_mouse_level(recs, dreal(recs, m))
+        ds = at_mouse_level(recs, dshuf(recs, m))
         exc = dr - ds
         t, p = stats.ttest_1samp(exc, 0.0)
-        frac = ds.mean() / dr.mean() * 100      # mean-of-means (headline)
+        frac = ds.mean() / dr.mean() * 100
         frac_tbl[grp][s] = frac
         print(f"  [{grp:5s}] {s}: dReal={dr.mean():+.4f}  dShuf={ds.mean():+.4f}"
-              f"  confound={frac:4.0f}%   genuine excess p={p:.3g}")
+              f"  null-reproduced={frac:4.0f}%   excess-over-null p={p:.3g}  n_mice={dr.size}")
 
 # %% [markdown]
-# ### Robustness (the headline is a mean-of-means; check it is not one-recording-driven)
+# ### Robustness (protocol-specific mouse summaries plus recording-level diagnostics)
 # The clean ``L<Q<C`` ordering is strongest under anaesthesia; per recording it
 # holds in most but not all sessions, and the C mean is pulled up by the deepest
-# anaesthesia recording. What is fully robust is the *sign* — the shuffle
-# over-reproduces C in every recording and L in almost none.
+# anaesthesia recording. The sign counts below are descriptive recording-level
+# diagnostics, not independent inferential replicates.
 
 # %%
-print("\nRobustness on ALL (n=10):")
-for m, s in enumerate(SHORT):
-    dr, ds = dreal(ALL, m), dshuf(ALL, m)
-    # per-recording fraction, ignoring sessions whose real change is ~0 (fraction undefined)
-    ok = np.abs(dr) > 0.01
-    per_rec = ds[ok] / dr[ok] * 100
-    n_confound_pos = int((ds > 0).sum())
-    print(f"  {s}: mean-of-means={ds.mean()/dr.mean()*100:4.0f}%  "
-          f"median-per-rec={np.median(per_rec):4.0f}%  "
-          f"shuffle over-reproduces (ΔShuf>0) in {n_confound_pos}/10 recordings")
-# leave-one-out sensitivity of C to the deepest-anaesthesia recording
-loo = [r for r in ALL if r != "mouse03_ane"]
-print(f"  C leave-one-out (drop mouse03_ane): {dshuf(loo,1).mean()/dreal(loo,1).mean()*100:.0f}% "
-      f"(vs {dshuf(ALL,1).mean()/dreal(ALL,1).mean()*100:.0f}% with all)")
-# per-recording ordering L<Q<C
-order_ok = sum(1 for n in ALL
-               if (unc(n)["shuf"][:,2].mean()-aw(n)["shuf"][:,2].mean())
-               <= (unc(n)["shuf"][:,0].mean()-aw(n)["shuf"][:,0].mean())
-               <= (unc(n)["shuf"][:,1].mean()-aw(n)["shuf"][:,1].mean()))
-print(f"  per-recording ΔShuf ordering L<=Q<=C holds in {order_ok}/10 (cleanest under anaesthesia)")
+print("\nRobustness by protocol:")
+for grp, recs in [("SLEEP", SLEEP), ("ANE", ANE)]:
+    print(f"  [{grp}]")
+    for m, s in enumerate(SHORT):
+        dr_rec, ds_rec = dreal(recs, m), dshuf(recs, m)
+        dr = at_mouse_level(recs, dr_rec)
+        ds = at_mouse_level(recs, ds_rec)
+        ok = np.abs(dr) > 0.01
+        per_mouse = ds[ok] / dr[ok] * 100
+        ratio = ds.mean() / dr.mean() * 100
+        print(f"    {s}: ratio-of-mouse-means={ratio:4.0f}%  "
+              f"median-per-mouse={np.median(per_mouse):4.0f}%  "
+              f"ΔNull>0 in {int((ds_rec > 0).sum())}/{len(recs)} recordings")
+    order_ok = sum(
+        1 for n in recs
+        if (unc(n)["shuf"][:, 2].mean() - aw(n)["shuf"][:, 2].mean())
+        <= (unc(n)["shuf"][:, 0].mean() - aw(n)["shuf"][:, 0].mean())
+        <= (unc(n)["shuf"][:, 1].mean() - aw(n)["shuf"][:, 1].mean())
+    )
+    print(f"    recording-level ΔNull ordering L<=Q<=C: {order_ok}/{len(recs)}")
+
+# Descriptive leave-one-out sensitivity within the anaesthesia protocol.
+ane_loo = [r for r in ANE if r != "mouse03_ane"]
+print(f"  [ANE] C ratio without mouse03: "
+      f"{dshuf(ane_loo, 1).mean() / dreal(ane_loo, 1).mean() * 100:.0f}%")
 
 # %% [markdown]
 # ## Evidence 2 — synthetic sensitivity: sparsity inflates C fastest, L slowest
@@ -206,7 +225,12 @@ win = dataio.state_frames(rec, "anesthesia")[:si.WIN["ane"]]
 Xr = rec.spike_smoothed[rows][:, win]
 adj_real, _ = net.density_threshold(net.correlation_matrix(Xr), 0.05, negative=True)
 adj_shuf, _ = net.density_threshold(
-    net.correlation_matrix(si.circular_shuffle(Xr, np.random.default_rng(0))), 0.05, negative=True)
+    net.correlation_matrix(si.circular_shuffle(
+        Xr, np.random.default_rng(0), si.contiguous_runs(win)
+    )),
+    0.05,
+    negative=True,
+)
 snap_real = module_snapshot(adj_real)
 snap_shuf = module_snapshot(adj_shuf)
 print(f"\n[{SNAP} anaesthesia]  real   {({k: round(snap_real[k],3) for k in ['Q','C','L','Lrand','n_big','largest']})}")
@@ -219,9 +243,9 @@ print(f"[{SNAP} anaesthesia]  shuffle{({k: round(snap_shuf[k],3) for k in ['Q','
 fig = plt.figure(figsize=(15, 5.2))
 gs = fig.add_gridspec(1, 3, wspace=0.32)
 
-# (a) confound fractions
+# (a) descriptive null-reproduced ratios
 axa = fig.add_subplot(gs[0, 0])
-groups = ["SLEEP", "ANE", "ALL"]
+groups = ["SLEEP", "ANE"]
 x = np.arange(len(groups))
 w = 0.26
 for j, s in enumerate(SHORT):
@@ -229,11 +253,11 @@ for j, s in enumerate(SHORT):
             color=COLORS[s], label=s)
 axa.axhline(0, color="k", lw=.6)
 axa.axhline(100, color="0.6", ls="--", lw=.8)
-axa.text(2.35, 101, "fully confounded", fontsize=7, color="0.4", va="bottom", ha="right")
+axa.text(1.35, 101, "fully reproduced by null", fontsize=7, color="0.4", va="bottom", ha="right")
 axa.set_xticks(x)
 axa.set_xticklabels(groups)
 axa.set_ylabel("% of real state-difference\nreproduced by the shuffle")
-axa.set_title("(a) Confound is local: L < Q < C", fontsize=11)
+axa.set_title("(a) Null sensitivity: L < Q < C", fontsize=11)
 axa.legend(title="measure", fontsize=9)
 
 # (b) real per-recording dReal vs dShuffle
@@ -243,9 +267,10 @@ for m, s in enumerate(SHORT):
     axb.scatter(dr, ds, s=34, color=COLORS[s], label=s, edgecolor="k", linewidth=.3)
 lim = 0.25
 axb.plot([0, lim], [0, lim], "0.5", ls="--", lw=.9)
-axb.text(lim, lim, " y=x\n(confounded)", fontsize=7, color="0.4", va="top")
+axb.text(lim, lim, "y=x\n(null reproduces raw)", fontsize=7, color="0.4",
+         va="top", ha="right")
 axb.axhline(0, color="0.5", lw=.8)
-axb.text(lim, 0.002, "y=0 (genuine) ", fontsize=7, color="0.4", ha="right", va="bottom")
+axb.text(lim, 0.002, "y=0 (no null shift) ", fontsize=7, color="0.4", ha="right", va="bottom")
 axb.set_xlim(-0.02, lim)
 axb.set_xlabel("real state-difference  ΔM")
 axb.set_ylabel("shuffle state-difference  ΔM")
@@ -263,7 +288,7 @@ axc.set_ylabel("excess over Erdos-Renyi baseline")
 axc.set_title("(c) Sparsity inflates C fastest,\nL slowest (independent signals)", fontsize=11)
 axc.legend(fontsize=9)
 
-fig.suptitle("OQ1 — why the shuffle confounds the LOCAL measure (C) but not the GLOBAL ones (Q, L)",
+fig.suptitle("OQ1 — why the temporal null reproduces more of the LOCAL measure (C)",
              y=1.02, fontsize=13)
 fig.savefig(FIG_DIR / "oq1_why_QL_robust_C_confounded.png", dpi=140, bbox_inches="tight")
 plt.show()
@@ -285,11 +310,12 @@ for ax, snap, title in [(axes[0], snap_real, "REAL"), (axes[1], snap_shuf, "SHUF
                  f"{snap['n_big']} modules (≥10), largest={snap['largest']*100:.0f}% of nodes",
                  fontsize=10)
     ax.set_xlabel("neuron (ordered by module)")
-    ax.set_xticks([]); ax.set_yticks([])
-fig2.suptitle("Real coupling → few large coherent modules + genuine integration loss "
+    ax.set_xticks([])
+    ax.set_yticks([])
+fig2.suptitle("Real graph → few large coherent modules + greater integration loss "
               "(L_real 6-14% above random).\n"
               "Shuffle → local clustering survives, but only small scattered chance-cliques "
-              "and L within ~2-3% of random (almost no genuine modules/shortcuts).",
+              "and L within ~2-3% of random.",
               y=1.06, fontsize=11)
 fig2.savefig(FIG_DIR / "oq1_mechanism_modules.png", dpi=140, bbox_inches="tight")
 plt.show()
@@ -299,29 +325,20 @@ plt.show()
 # * The naive "Q stays flat / chance-cliques form no communities" guess is
 #   **false**: sparsity inflates the shuffle value of Q and L too (both exceed
 #   the ER baseline; panel c).
-# * What is fully robust: the shuffle **over-reproduces C in 10/10 recordings**, a
-#   minority of the Q increase, and almost none of the L increase. Aggregate
-#   confound fractions **C ~56% (median-per-recording ~42%, leave-out-mouse03_ane
-#   ~46%) > Q ~18% > L ~4%**. The *raw* shuffle-floor shift is ordered L<Q<C in
-#   **10/10** recordings; the confound-*fraction* ordering is noisier (~7/10,
-#   cleanest under anaesthesia — 4/4 ane vs ~3/6 sleep) only because it divides by
-#   per-recording ΔReal, which is near zero for Q in some sleep sessions. L's ~4%
-#   is a real, high-effect-size result (ΔL_real ≈ 40× the shuffle sampling noise),
-#   not an estimator floor.
+# * In the protocol-specific mouse summaries, the descriptive null-reproduced
+#   ratio is largest for C, intermediate for Q, and smallest for L. These ratios
+#   describe this pipeline and null; they are not causal confound percentages.
 # * Interpretation (consistent with panels b/c and the module snapshot; an
-#   interpretation the numbers support, not one they prove): the confound tracks
+#   interpretation the numbers support, not one they prove): null sensitivity tracks
 #   how *local* the measure is. Clustering is a local triangle count — exactly what
 #   chance coincidence-cliques from sparsity create — so it inherits most of the
 #   marginal-driven state difference. Path length is a global integration measure
 #   the chance-cliques barely touch (shuffle L stays within ~2-3% of random while
-#   real L is 6-14% above), so its awake->unconscious increase is almost entirely
-#   genuine. Modularity is intermediate: chance-cliques form small scattered
-#   modules, but the real state change is dominated by reorganisation into a few
-#   large coherent modules.
-# * Defensible one-line summary: *the shuffle reproduces most of the clustering
-#   increase (~50%, 10/10 recordings), a minority of the modularity increase
-#   (~15-18%), and essentially none of the path-length increase (~3-4%); cleanest
-#   under anaesthesia.*
-# * Practical takeaway (unchanged): trust **L** most and **Q** for coupling
-#   claims; report **C/SWP** as excess-over-shuffle. See ``state_difference_cause.py``
-#   (OQ2) for *what* marginal drives the C confound.
+#   real L is 6-14% above). This supports a larger excess-over-null for L than for
+#   local C under this analysis, without identifying a causal source. Modularity is
+#   intermediate: chance-cliques form small scattered modules, while the real graph
+#   contains a few larger coherent modules.
+# * Practical takeaway: L and Q are less sensitive than local C to this temporal
+#   null, but all measures should be reported as raw, null, and excess-over-null.
+#   See ``state_difference_cause.py``
+#   (OQ2) for *what* marginal drives the C null sensitivity.

@@ -4,7 +4,8 @@ Both ``why_QL_robust_C_confounded.py`` (OQ1) and ``state_difference_cause.py``
 (OQ2) need the same expensive per-recording quantities:
 
     * real network measures  Q, C, L   (K = 5 % binary graph, as in script 30)
-    * circular-shift **shuffle-null** Q, C, L  (mean + samples per state)
+    * within-bout circular-shift **temporal-null** Q, C, L
+      (mean + samples per state)
     * per-neuron **marginal** statistics the shuffle preserves
       (event rate, active-frame fraction, activity concentration,
        lag-1 autocorrelation)
@@ -21,6 +22,7 @@ from __future__ import annotations
 import os
 import sys
 import warnings
+import json
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -48,6 +50,7 @@ ANE_RECS = ["mouse03_ane", "mouse05_ane", "mouse06_ane", "mouse07_ane"]
 ALL_RECS = [(n, "sleep") for n in SLEEP_RECS] + [(n, "ane") for n in ANE_RECS]
 
 CACHE = PROJECT_ROOT / "results" / "cache" / "shuffle_investigation.npz"
+CACHE_SCHEMA = 2
 
 
 # --- primitives -------------------------------------------------------------
@@ -59,14 +62,42 @@ def neuron_rows(rec):
     return rows
 
 
-def circular_shuffle(X, rng):
-    """Roll each neuron's trace by an independent random lag: destroys cross-neuron
-    timing, preserves each neuron's own signal (autocorrelation + marginal)."""
-    out = np.empty_like(X)
-    T = X.shape[1]
+def contiguous_runs(frames):
+    """Positions of contiguous bouts in a selected original-frame vector."""
+    frames = np.asarray(frames)
+    cuts = np.flatnonzero(np.diff(frames) != 1) + 1
+    return [run for run in np.split(np.arange(frames.size), cuts) if run.size]
+
+
+def circular_shuffle(X, rng, runs=None):
+    """Independently roll each neuron within each contiguous state bout.
+
+    ``runs=None`` treats all columns as one contiguous bout, which is useful for
+    synthetic inputs. Real state data should always pass runs derived from the
+    original frame indices so events are never rolled across concatenated gaps.
+    """
+    out = np.array(X, copy=True)
+    runs = [np.arange(X.shape[1])] if runs is None else runs
     for i in range(X.shape[0]):
-        out[i] = np.roll(X[i], int(rng.integers(1, T)))
+        for run in runs:
+            if run.size > 1:
+                out[i, run] = np.roll(X[i, run], int(rng.integers(1, run.size)))
     return out
+
+
+def mouse_id(name):
+    """Biological-mouse key; mouse 4's two sleep days are repeated sessions."""
+    if name in {"mouse04_day1_sleep", "mouse04_day2_sleep"}:
+        return "mouse04_sleep"
+    return name
+
+
+def aggregate_by_mouse(values, recs):
+    """Average recording-level values within biological mouse."""
+    grouped = {}
+    for name, value in zip(recs, np.asarray(values), strict=True):
+        grouped.setdefault(mouse_id(name), []).append(value)
+    return np.asarray([np.nanmean(group, axis=0) for group in grouped.values()])
 
 
 def graph_measures(C):
@@ -130,12 +161,13 @@ def compute_recording(name, kind):
     out = {"kind": kind, "unc_label": rec.state_labels[1]}
     for label in rec.state_labels:
         win = dataio.state_frames(rec, label)[:width]
+        runs = contiguous_runs(win)
         Xsm = rec.spike_smoothed[rows][:, win]
         Xdc = rec.spike_deconv[rows][:, win]
         C = net.correlation_matrix(Xsm)
         real = graph_measures(C)
         rng = np.random.default_rng(SEED)
-        shuf = np.array([graph_measures(net.correlation_matrix(circular_shuffle(Xsm, rng)))
+        shuf = np.array([graph_measures(net.correlation_matrix(circular_shuffle(Xsm, rng, runs)))
                          for _ in range(N_SHUFFLE)])
         marg = marginal_stats(Xsm, Xdc)
         out[label] = {"real": real, "shuf_mean": shuf.mean(0), "shuf_std": shuf.std(0),
@@ -156,8 +188,25 @@ def compute_all():
 _SCALAR = ("event_rate", "active_frac", "concentration", "autocorr1")
 
 
+def _manifest():
+    """Settings that determine cached numeric results."""
+    return {
+        "schema": CACHE_SCHEMA,
+        "null": "within_bout_circular_shift",
+        "K": K,
+        "gamma": GAMMA,
+        "n_runs": N_RUNS,
+        "n_shuffle": N_SHUFFLE,
+        "max_neurons": MAX_NEURONS,
+        "n_sources": N_SOURCES,
+        "seed": SEED,
+        "windows": WIN,
+        "recordings": ALL_RECS,
+    }
+
+
 def _flatten(results):
-    flat = {}
+    flat = {"__manifest__": json.dumps(_manifest(), sort_keys=True)}
     for name, r in results.items():
         flat[f"{name}::kind"] = r["kind"]
         flat[f"{name}::unc_label"] = r["unc_label"]
@@ -171,7 +220,7 @@ def _flatten(results):
 
 
 def _unflatten(flat):
-    names = sorted({k.split("::")[0] for k in flat})
+    names = sorted({k.split("::")[0] for k in flat if not k.startswith("__")})
     results = {}
     for name in names:
         kind = str(flat[f"{name}::kind"])
@@ -192,7 +241,12 @@ def _unflatten(flat):
 def load_or_compute(force=False):
     if CACHE.exists() and not force:
         flat = dict(np.load(CACHE, allow_pickle=False))
-        return _unflatten(flat)
+        cached_manifest = flat.pop("__manifest__", None)
+        cached_manifest = None if cached_manifest is None else str(cached_manifest.item())
+        expected_manifest = json.dumps(_manifest(), sort_keys=True)
+        if cached_manifest == expected_manifest:
+            return _unflatten(flat)
+        print("cached shuffle results use different settings; recomputing", flush=True)
     results = compute_all()
     CACHE.parent.mkdir(parents=True, exist_ok=True)
     np.savez(CACHE, **_flatten(results))
