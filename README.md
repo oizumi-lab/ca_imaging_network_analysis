@@ -36,6 +36,7 @@ Open the `scripts/*.py` files as **interactive `# %%` cell scripts** in VS Code
 |---|---|
 | `00_inspect_data.py` | What's in a recording: traces, brain states, neuron positions |
 | `01_reproduce_example.py` | Reproduce + validate the dataset's official example pipeline |
+| `02_visualization_activity.py` | Full timelines for all sleep/anesthesia sessions: sampled/all-neuron ΔF/F views and spike rasters |
 | `10_functional_connectivity.py` | Build correlation-based functional networks per state |
 | `20_modularity.py` | Density thresholding, Louvain modularity, resolution, robustness |
 | `30_state_comparison.py` | **The result:** modularity is higher during sleep/anesthesia |

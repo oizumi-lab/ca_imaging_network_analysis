@@ -250,6 +250,63 @@ def state_frames(rec: Recording, which: str) -> np.ndarray:
     return rec.used_frame[which]
 
 
+def state_codes(rec: Recording) -> dict[float, str]:
+    """Return the numeric state-code legend appropriate for ``rec``.
+
+    Code ``1`` means NREM in sleep recordings but anesthesia in anesthesia
+    recordings.  Centralizing this dispatch prevents visualizations and future
+    analyses from silently applying the wrong categorical meaning.
+    """
+    if rec.data_info == "sleep":
+        return SLEEP_STATE_CODES
+    if rec.data_info == "ane":
+        return ANE_STATE_CODES
+    raise ValueError(f"Unknown recording type: {rec.data_info!r}")
+
+
+def select_neuron_rows(
+    rec: Recording,
+    max_neurons: int | None = None,
+    seed: int = 0,
+    active_only: bool = True,
+) -> np.ndarray:
+    """Select reproducible neuron-row indices for a recording analysis.
+
+    Parameters
+    ----------
+    rec
+        Recording whose row-aligned matrices will be indexed.
+    max_neurons
+        Optional maximum row count.  If a subsample is needed it is drawn
+        without replacement, sorted back into recording order, and seeded.
+    seed
+        Seed for NumPy's legacy ``RandomState``.  The tutorials historically
+        used ``RandomState(0)``; retaining it keeps existing scientific examples
+        numerically reproducible across this refactor.
+    active_only
+        If true, start from ``nonzero_ROI`` when available.  Otherwise all rows
+        are eligible.  A recording without that mask also falls back to all rows.
+    """
+    if active_only and rec.nonzero_ROI is not None:
+        rows = np.flatnonzero(rec.nonzero_ROI)
+    else:
+        rows = np.arange(rec.n_neurons)
+
+    if max_neurons is None:
+        return rows
+    if isinstance(max_neurons, (bool, np.bool_)) or not isinstance(
+        max_neurons, (int, np.integer)
+    ):
+        raise TypeError("max_neurons must be an integer or None")
+    if max_neurons <= 0:
+        raise ValueError("max_neurons must be positive")
+    if rows.size <= max_neurons:
+        return rows
+
+    rng = np.random.RandomState(seed)
+    return np.sort(rng.choice(rows, int(max_neurons), replace=False))
+
+
 def activity(
     rec: Recording,
     which: str,
