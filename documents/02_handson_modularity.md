@@ -28,15 +28,24 @@ poetry install
 poetry run python scripts/download_data.py --example   # 84 MB, enough to start
 ```
 
+Run `poetry run python scripts/download_data.py` before `00_inspect_data.py`.
+That tutorial builds the complete ten-session inventory and loads all 7,843
+neurons in its representative `mouse01_sleep` session. The 84 MB subset remains
+useful for later quick validation exercises.
+
 Open scripts in VS Code (Python extension) or Spyder and run cell by cell
 (`# %%` markers). Each script saves its figures to `results/figures/`.
 
 ## 1 · Inspect the data — `00_inspect_data.py`
 
-Learn what a recording contains: `spike_smoothed` (N neurons × T frames),
-per-frame brain `state`, neuron `centroid`s, and the `used_frame` epochs chosen
-for analysis. Calcium imaging at 7.65 Hz; states are labelled per frame
-(awake / quiet-awake / NREM / REM, or awake / anesthesia).
+First build an inventory of all ten recording sessions: ROI count, total frames,
+duration, and the proportion of every raw brain-state label. This includes awake,
+quiet awake, NREM, and REM in sleep files, and awake and anesthesia in anesthesia
+files. No paper-specific frame-selection mask is applied. The metadata-only scan
+shows the full dataset's scale without loading every multi-gigabyte activity
+matrix. Then inspect all 7,843 neurons in one full recording: its deconvolved
+event raster, `spike_smoothed` matrix (N neurons × T frames), per-frame brain
+`state`, and neuron `centroid`s. Calcium imaging is sampled at 7.65 Hz.
 
 **Concept to land:** the data are large-scale (thousands of neurons) and
 single-cell resolution — that's what makes single-cell network analysis possible.

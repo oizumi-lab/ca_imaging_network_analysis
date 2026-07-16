@@ -30,11 +30,15 @@ poetry run python scripts/01_reproduce_example.py  # validate against the refere
 Open the `scripts/*.py` files as **interactive `# %%` cell scripts** in VS Code
 (Python extension) or Spyder and run them cell by cell.
 
+`00_inspect_data.py` requires the full download: it builds the ten-session
+inventory and then plots all 7,843 neurons in `mouse01_sleep`. The 84 MB sample
+remains useful for the later quick validation exercises.
+
 ## The hands-on, in order
 
 | Script | What you learn |
 |---|---|
-| `00_inspect_data.py` | What's in a recording: traces, brain states, neuron positions |
+| `00_inspect_data.py` | Survey raw state-label proportions, then plot every neuron in one full recording |
 | `01_reproduce_example.py` | Reproduce + validate the dataset's official example pipeline |
 | `02_visualization_activity.py` | Full timelines for all sleep/anesthesia sessions: sampled/all-neuron ΔF/F views and spike rasters |
 | `10_functional_connectivity.py` | Build correlation-based functional networks per state |

@@ -1,0 +1,627 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{libertinus}
+\usepackage{microtype}
+\usepackage[a4paper,margin=21mm,headheight=15pt]{geometry}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{booktabs,longtable,tabularx,array}
+\usepackage{enumitem}
+\usepackage[most]{tcolorbox}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{hyperref}
+
+\definecolor{navy}{HTML}{163A5F}
+\definecolor{teal}{HTML}{087E8B}
+\definecolor{green}{HTML}{2A7F62}
+\definecolor{pale}{HTML}{EEF5F7}
+\definecolor{warm}{HTML}{FFF6E8}
+\definecolor{redpale}{HTML}{FFF0F0}
+\definecolor{muted}{HTML}{4B5563}
+\hypersetup{colorlinks=true,linkcolor=navy,citecolor=teal,urlcolor=teal,
+  pdfauthor={DMD initial validation planning},
+  pdftitle={Initial validation plan for DMD on deconvolved calcium-event data}}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{DMD initial validation plan}
+\rhead{Version 1.1 --- 16 July 2026}
+\cfoot{\thepage}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.52em}
+\setlist{nosep,leftmargin=1.6em}
+\renewcommand{\arraystretch}{1.16}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\newtcolorbox{decisionbox}[1][]{breakable,colback=pale,colframe=teal,
+  boxrule=0.75pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,
+  title=#1,fonttitle=\bfseries}
+\newtcolorbox{gatebox}[1][]{breakable,colback=green!5,colframe=green,
+  boxrule=0.75pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,
+  title=#1,fonttitle=\bfseries}
+\newtcolorbox{riskbox}[1][]{breakable,colback=warm,colframe=orange!70!black,
+  boxrule=0.75pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,
+  title=#1,fonttitle=\bfseries}
+\newtcolorbox{stopbox}[1][]{breakable,colback=redpale,colframe=red!65!black,
+  boxrule=0.75pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,
+  title=#1,fonttitle=\bfseries}
+
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\Hh}{^{\mathsf H}}
+\newcommand{\R}{\mathbb{R}}
+\DeclareMathOperator{\tr}{tr}
+
+\begin{document}
+\hypersetup{pageanchor=false}
+
+\begin{titlepage}
+  \centering
+  \vspace*{1.6cm}
+  {\color{navy}\rule{\textwidth}{1.2pt}}\\[1.0cm]
+  {\Huge\bfseries Does DMD recover reproducible dynamics\\[0.2em]
+  from deconvolved calcium-event data?\par}
+  \vspace{0.55cm}
+  {\Large Initial validation plan before the full brain-state analysis\par}
+  \vspace{0.9cm}
+  {\color{navy}\rule{\textwidth}{0.6pt}}\\[0.9cm]
+  \begin{tcolorbox}[colback=pale,colframe=teal,width=0.92\textwidth,arc=2pt]
+  \centering
+  \textbf{Planning checkpoint only.} No DMD test or biological comparison has
+  been run for this document. Implementation will begin only after this plan is
+  reviewed. The workflow stops again after the initial validation report so that
+  its results can be inspected before any all-recording analysis or mode tracking.
+  \end{tcolorbox}
+  \vfill
+  \begin{tabular}{rl}
+    Project: & \texttt{ca\_imaging\_network\_analysis/DMD}\\
+    Version: & 1.1\\
+    Date: & 16 July 2026\\
+    Parent plan: & \texttt{02\_dmd\_brain\_state\_analysis\_plan.pdf}
+  \end{tabular}
+  \vfill
+\end{titlepage}
+
+\hypersetup{pageanchor=true}
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\section{Decision summary}
+
+\begin{decisionbox}[Narrow decision to be made]
+The pilot asks whether at least one neuron-resolved observation and preprocessing
+arm yields a low-rank linear propagator that is (i) predictively useful on
+contiguous held-out data, (ii) numerically and bootstrap reproducible, (iii)
+distinguishable from smoothing and independent-neuron nulls, and (iv) recoverable
+under a small known-system simulation matched to empirical sparsity. It does
+\emph{not} ask whether awake and unconscious states differ.
+\end{decisionbox}
+
+The closest direct precedent is Pachitariu et al., who applied a time-lagged,
+ridge-regularized DMD to neuronwise standardized, spike-deconvolved two-photon
+data after PCA, and deliberately used a 0.23-s lag to reduce sensitivity to
+short-timescale deconvolution artefacts \citep{pachitariu2026critical}. We will
+reproduce the logic of that analysis, but not copy parameters that are
+incompatible with the present sampling rate and 300-frame target window.
+
+The pilot has three possible conclusions:
+
+\begin{description}[style=nextline,leftmargin=1.7em]
+  \item[PASS to expanded validation.] At least one arm passes the synthetic,
+  predictive, reproducibility, and tracking-resolution gates. It becomes a
+  candidate for validation on all recordings; no biological claim follows yet.
+  \item[REVISE.] DMD is useful only after changing the signal, lag, rank, or
+  window length. The parent plan is prospectively amended before further work.
+  \item[STOP.] No arm is predictive and reproducible beyond the controls, or
+  apparent success is reproduced by the smoothing/null pipeline. Intensive DMD
+  and Grassmann tracking are not pursued with these data.
+\end{description}
+
+\section{Questions and non-goals}
+
+\subsection{Pilot questions}
+
+\begin{enumerate}
+  \item Can a ridge-DMD model predict held-out population activity better than
+  persistence at physical horizons near 1 and 2 s?
+  \item Does the full population operator add information beyond independent
+  per-PC autoregressions, or is predictability explained by marginal smoothing
+  and calcium autocorrelation?
+  \item Are the leading eigenvalues and invariant subspace reproducible under
+  moving-block resampling and deterministic neuron subsampling?
+  \item Can the estimator recover known real-relaxation versus rotational
+  dynamics after sparse-event and calcium-like observation transformations?
+  \item Which observation arm---native deconvolution, binned events, stored
+  smoothed events, or $\Delta F/F$---is empirically defensible for the next phase?
+\end{enumerate}
+
+\subsection{Explicit non-goals}
+
+\begin{stopbox}[Work excluded from this checkpoint]
+The pilot will not estimate awake--sleep or awake--anaesthesia effect sizes;
+train a state classifier; use state separation to choose preprocessing; implement
+SGOT or another Grassmann tracker; claim individual biological mode identity;
+analyze transitions; or run cohort-level inference. In-sample reconstruction is
+diagnostic and cannot by itself constitute validation.
+\end{stopbox}
+
+\section{What is copied from Pachitariu and what is revised}
+
+Pachitariu et al. standardized each neuron, projected activity into as many as
+1,000 PCs, and fitted a ridge map from $X_t$ to $X_{t+\Delta t}$, using a ridge
+penalty of 0.01 for two-photon data and $\Delta t\simeq0.23$ s
+\citep{pachitariu2026critical}. They compared discrete eigenvalue distributions
+with matched simulations rather than relying on a noisy inversion to a
+continuous generator. The audited reference is the public
+\href{https://github.com/MouseLand/critical_init/tree/v1.0}{MouseLand/critical\_init
+release v1.0}; its version identifier will be recorded in the pilot manifest.
+
+\begin{riskbox}[Reference-code audit and declared departures]
+Release v1.0 centers each neuron and divides by its root-mean-square deviation
+plus $10^{-3}$; this is nearly, but not exactly, a textbook sample $z$-score.
+It applies an unnormalized Gram-matrix ridge of 0.01, so that number is not
+portable across sample counts or ranks. Its rotation code filters on
+$|\lambda|>0.25$, whereas the associated figure caption describes a real-part
+threshold. The smoke test will reproduce the code definition; the report will
+also show the caption definition and label the discrepancy. The local-window
+implementation will use an SVD/method-of-snapshots solve rather than explicitly
+squaring the covariance condition number. These are recorded adaptations, not
+silent changes.
+\end{riskbox}
+
+\begin{decisionbox}[Prospective implementation amendment (version 1.1)]
+Before any empirical DMD fit was inspected, the implementation audit fixed four
+under-specified points. First, a $k=4$ projector inside a $q=4$ model is the
+identity and cannot measure mode stability; therefore only $q\geq8$ models are
+eligible for the $k=4$ subspace and tracking gates. Lower ranks remain eligible
+for prediction but can support only a conditional outcome. Second, ``maximally
+time-spread'' now means the global maximum of the minimum separation between
+integer window starts, with the lexicographically earliest tied solution. Third,
+development validation now mirrors deployment by fitting the first 80\% and
+scoring the last 20\% within each complete development window. Fourth, the
+approved raw-label windows remain primary, while S$z$/S$c$ receive a seven-frame
+edge-trimmed sensitivity because the stored smoother can carry support across a
+nearby label transition. These corrections were frozen in the machine-readable
+configuration before examining a DMD result.
+\end{decisionbox}
+
+\begin{longtable}{@{}P{0.24\textwidth}P{0.31\textwidth}P{0.37\textwidth}@{}}
+\toprule
+Element & Pachitariu-aligned choice & Required adaptation here\\
+\midrule
+\endfirsthead
+\toprule
+Element & Pachitariu-aligned choice & Required adaptation here\\
+\midrule
+\endhead
+Observation & Per-neuron spike-deconvolved activity & This becomes the anchor,
+not a presumed winner; stored smoothed events, binned events, and $\Delta F/F$
+are observation-model controls.\\
+Scaling & Per-neuron centering and RMS scaling before PCA & Reproduce the
+release-v1.0 RMS-plus-$10^{-3}$ rule, estimating both quantities from development
+data only. Never standardize each 300-frame window independently.\\
+Spatial reduction & PCA to 1,000 dimensions & A near-literal 1,000-neuron
+sanity check is possible on \texttt{example\_data}; a 300-frame window cannot
+identify 1,000 dimensions, so local fits use low fixed ranks.\\
+Operator & Ridge regression in PC coordinates & Retain ridge DMD as the main
+estimator. Unregularized DMD is only a numerical benchmark.\\
+Lag & 0.23 s to reduce deconvolution artefacts & The closest lag is two frames,
+$2/7.65=0.261$ s. Four- and eight-frame lags test 0.523 and 1.046 s; one frame is
+reported only as an artefact-sensitive diagnostic.\\
+Ridge penalty & Unnormalized $\alpha=0.01$ for two-photon data & Retain the raw
+0.01 fit as the precedent anchor, but select from a dimensionless, scale-relative
+training-only grid because effective shrinkage changes with dimension, sample
+count, and feature scale.\\
+Fit duration & Long recordings at 22 Hz & Include a long-block diagnostic, then
+separately test the intended 300-frame (39.2-s) deployment window and a
+1,500-frame (196.1-s) rescue window.\\
+Endpoint & Eigenvalue complexity/rotations & Report this endpoint, but require
+forecast and subspace stability as additional feasibility evidence.\\
+\bottomrule
+\end{longtable}
+
+This is a faithful methodological adaptation rather than a literal replication.
+In particular, copying 1,000 PCs into 300 samples would guarantee an
+underdetermined local operator, and copying the absolute ridge penalty without
+auditing scaling would not reproduce the same regularization strength.
+
+\section{Development data and leakage control}
+
+\subsection{Files and fixed selection rule}
+
+The smoke test uses \texttt{data/raw/example\_data.mat}, which contains 1,000
+neurons. Because that example is derived from the first sleep dataset, empirical
+evidence instead uses a separate sleep recording with adequate windows in both
+labels and the smallest-ROI anaesthesia recording, selected before any DMD result:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lrrY@{}}
+\toprule
+File & ROIs & Frames & Pilot role\\
+\midrule
+\texttt{example\_data.mat} & 1,000 & 9,350 & Code/numerical smoke test and
+near-literal high-dimensional Pachitariu configuration; not biological evidence.\\
+\texttt{mouse02\_sleep.mat} & 6,574 & 18,700 & Six disjoint awake and six
+disjoint NREM window candidates, using raw labels rather than
+\texttt{used\_frame}.\\
+\texttt{mouse07\_ane.mat} & 4,337 & 19,000 & Six disjoint awake and six
+disjoint anaesthesia window candidates.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+This keeps the first computation small while including both paradigms. The next
+phase, if approved, repeats the locked configuration on all ten recordings.
+
+\subsection{Window selection and label masking}
+
+Within each recording--state cell, choose six non-overlapping 300-frame windows
+that have one constant raw dataset label and remain inside one acquisition
+segment. Globally maximize the minimum separation between their integer start
+indices; among tied solutions, use the lexicographically earliest sequence. The project-specific
+\texttt{used\_frame} variable is not an eligibility criterion. Split the six
+deterministically into three development and three untouched evaluation windows,
+alternating in time. This yields 12 untouched empirical evaluation windows.
+
+State labels are permitted only to create approximately homogeneous windows and
+balance development data. During hyperparameter selection, their names are
+replaced by anonymous stratum identifiers, and no between-label performance or
+separability criterion is calculated.
+
+For each recording and signal arm, neuron scaling and the common PCA basis are
+learned from the six development windows pooled with equal weight across the two
+anonymous strata. Hyperparameters use local blocked validation: within each
+development window, fit the first 80\% and score the final contiguous 20\%, then
+aggregate across the six anonymously. The PCA basis is then frozen for every
+evaluation window.
+This is essential: window-specific PCA would create artificial subspace motion
+and make later mode comparisons uninterpretable.
+
+All neurons with finite, nonzero variance in the development data are eligible;
+no neuron is selected using state differences or DMD performance. The pilot will
+report the retained count and repeat the winning configuration on deterministic
+equal-$N$ neuron subsets as a dimensional sensitivity.
+
+\section{Candidate observation and preprocessing arms}
+
+All arms preserve one row per neuron. No across-neuron averaging, binary
+threshold, or new Gaussian smoothing is applied. OASIS amplitudes are not treated
+as calibrated spike counts or spikes per second \citep{friedrich2017,kiyooka2026}.
+
+\begin{longtable}{@{}P{0.12\textwidth}P{0.27\textwidth}P{0.23\textwidth}P{0.30\textwidth}@{}}
+\toprule
+ID & Signal construction & Scaling & Purpose\\
+\midrule
+\endfirsthead
+\toprule
+ID & Signal construction & Scaling & Purpose\\
+\midrule
+\endhead
+P & Native \texttt{spike\_deconv} at 7.65 Hz & Train-only, code-matched
+centered RMS scaling & Pachitariu anchor; retains temporal resolution but is
+highly sparse.\\
+B4 & Non-overlapping four-frame sums of \texttt{spike\_deconv}, divided by
+0.523 s & Train-only centered RMS scaling & Reduces zero inflation without the
+1.96-s stored smoothing. It is an event-mass-rate proxy, not calibrated firing rate.\\
+S$z$ & Stored 15-frame/1.96-s \texttt{spike\_smoothed} at 7.65 Hz & Train-only
+centered RMS scaling & Tests the signal used by the Kiyooka network analysis
+under Pachitariu-like scaling. No second smoothing is added.\\
+S$c$ & Stored \texttt{spike\_smoothed} & Recording/development mean-centering,
+no variance scaling & Restricted sensitivity matching the current parent plan;
+tests whether $z$-scoring creates or erases structure.\\
+F & Native $\Delta F/F$ & Train-only centered RMS scaling & Observation-model
+control: asks whether continuous calcium carries reproducible dynamics lost by
+deconvolution.\\
+\bottomrule
+\end{longtable}
+
+A nine-frame/1.176-s binned-event arm is deferred from the core screen because a
+39.2-s window would contain only about 33 bins. It may be run as a rank-2 stress
+test if all higher-resolution event arms fail. If only $\Delta F/F$ succeeds,
+the conclusion is to change the primary observation model, not to declare the
+deconvolved signal validated. Calcium-aware latent-dynamics methods remain a
+later alternative if separate deconvolution and DMD are inadequate
+\citep{wei2020,koh2023}.
+
+Because the stored 15-frame smoother has an approximate seven-frame half-width,
+S$z$/S$c$ are additionally rescored after trimming seven samples from each edge
+of every selected window. This is a declared boundary-support sensitivity; the
+untrimmed raw-label window remains the primary arm definition.
+
+\section{Model and minimal hyperparameter grid}
+
+For a fixed arm, common PCA basis, rank $q$, and lag $\ell$, let
+$z_t\in\R^q$ be the PC score. Fit
+\begin{equation}
+  z_{t+\ell}=Bz_t+\varepsilon_t,
+  \qquad
+  \widehat B=YX\T\left(XX\T+\alpha I\right)^{-1}.
+\end{equation}
+The eigenvalues of $\widehat B$ are discrete-lag eigenvalues. The pilot will not
+convert them to a continuous generator unless a value is well separated from
+zero and the complex-log branch is unambiguous.
+
+For deployment fits, define the scale
+$s_X=\tr(XX\T)/q$ and write $\alpha=\eta s_X$. Thus $\eta$ is the ridge penalty
+relative to the mean eigenvalue of the predictor Gram matrix. The literal
+Pachitariu smoke-test fit instead uses the original unnormalized $\alpha=0.01$.
+
+\subsection{Three fit tiers}
+
+\begin{enumerate}
+  \item \textbf{Precedent check.} On \texttt{example\_data}, run arm P with
+  the release-v1.0 neuronwise RMS scaling, the maximum numerically supported PCA
+  dimension up to 1,000, unnormalized $\alpha=0.01$, and a two-frame lag.
+  Reproduce the discrete-eigenvalue plane and rotations-per-tenfold-attenuation
+  summary of Pachitariu et al. This checks implementation fidelity, not
+  biological validity.
+  \item \textbf{Deployment check.} In the 300-frame development/evaluation
+  windows, use a common recording-level basis and low ranks. Native arms use
+  $q\in\{2,4,8,16\}$, additionally capped at no more than one retained
+  dimension per ten eligible training snapshot pairs. B4 contains only 75 bins
+  and about 60 fitting bins, so it uses $q\in\{2,4\}$.
+  \item \textbf{Long-block diagnostic.} In each of the four recording--label
+  cells, select the 1,500-frame block centered in the longest eligible
+  constant-label bout, without reference to DMD output. Refit at
+  $q\in\{4,8,16,32\}$ using blocked training-only selection and a final
+  contiguous 20\% evaluation segment. This is a prespecified rescue test that
+  distinguishes estimator failure from insufficient 39.2-s support; it is not
+  an opportunity to select a favourable biological contrast.
+\end{enumerate}
+
+Native-arm lags are $\ell\in\{1,2,4,8\}$ frames, corresponding to 0.131, 0.261,
+0.523, and 1.046 s; two frames is the precedent anchor and one frame is diagnostic.
+For S$z$/S$c$, a 15-frame (1.961-s) lag additionally tests the scale of the stored
+smoothing kernel. B4 uses one-, two-, and four-bin lags.
+
+The raw precedent value $\alpha=0.01$ is always shown. On development data only,
+deployment selection uses
+\begin{equation*}
+  \eta\in\{10^{-4},10^{-3},10^{-2},10^{-1},1\}.
+\end{equation*}
+Both $\eta$ and the resulting raw $\alpha$ are recorded. Exact DMD ($\eta=0$)
+is a conditioning diagnostic, not an eligible winner when it is unstable.
+
+\section{Held-out empirical validation}
+
+\subsection{Blocked prediction}
+
+In each untouched 300-frame evaluation window, estimate the local operator from
+the first 80\% (240 frames, or 60 B4 bins) and evaluate on the final contiguous
+20\%. No shuffled pair, acquisition break, state boundary, or artificial
+bootstrap-block join may enter $X\rightarrow Y$.
+
+Rolling-origin forecasts reinitialize from the observed state and assess the
+nearest available horizons to 0.26, 1.05, and 2.09 s. For baseline $b$, define
+\begin{equation}
+  \operatorname{Skill}_b(h)=
+  1-\frac{\sum_t\lVert z_{t+h}-\widehat z^{\mathrm{DMD}}_{t+h}\rVert_2^2}
+          {\sum_t\lVert z_{t+h}-\widehat z^{(b)}_{t+h}\rVert_2^2}.
+\end{equation}
+Positive skill means that DMD improves on that baseline. Report variance-weighted
+and equal-PC versions, normalized RMSE, correlation, and the fraction of
+non-finite or explosive forecasts.
+
+Required baselines are:
+
+\begin{enumerate}
+  \item training mean;
+  \item persistence, $\widehat z_{t+h}=z_t$; and
+  \item an independent ridge AR model for each PC at the same lag and horizon.
+\end{enumerate}
+
+Beating persistence alone is insufficient for the smoothed signal. Full-DMD gain
+over diagonal AR is the evidence for cross-component population dynamics. Its
+absence does not make stable real relaxation spectra meaningless, but it forbids
+a claim of coordinated/rotational modes.
+
+\subsection{Numerical and spectral diagnostics}
+
+For every fit, retain the effective rank, ridge scale, normal-matrix condition
+number, residual, spectral radius, non-finite flag, and forecast blow-up flag.
+Plot the discrete eigenvalue plane directly. Following Pachitariu et al., report
+the number of rotations per tenfold attenuation for sufficiently nonzero complex
+eigenvalues, but do not interpret a frequency with fewer than three cycles in the
+window or a branch-ambiguous logarithm.
+
+\subsection{Bootstrap and neuron-subset reproducibility}
+
+With the PCA basis fixed, perform 100 moving-block resamples per evaluation
+window. Block length is at least 15 native frames (about 2 s) and may increase
+with the empirical autocorrelation time. Snapshot pairs are formed only inside
+blocks. Group a conjugate pair as one real invariant subspace.
+
+For a development-only reference operator with $q\geq8$, select $k=4$ real
+invariant dimensions by mean training modal-coefficient energy, never splitting
+a conjugate pair. Match every evaluation and bootstrap fit back to those fixed
+reference groups. Compare a bootstrap projector $P^{(b)}$ with its reference
+$P$ using
+\begin{equation}
+  S_{\mathrm{sub}}=
+  \frac{1}{k}\tr\!\left(PP^{(b)}\right)
+  =\frac{1}{k}\sum_{j=1}^{k}\cos^2\theta_j.
+\end{equation}
+Also report matched discrete-eigenvalue spread and forecast uncertainty. Repeat
+the chosen arm on two deterministic, equal-size neuron subsets to show whether
+the conclusion depends on a particular population sample.
+
+Use normalized projector distance
+$d_P=\sqrt{\max(0,1-S_{\mathrm{sub}})}$. If fewer than four nontrivial matched
+dimensions exist, or if $k=q$, subspace stability is uninformative and the
+corresponding gate is not eligible to pass.
+
+To determine whether future tracking has adequate resolution, compute
+\begin{equation}
+ R_{\mathrm{track}}=
+ \frac{\operatorname{median}(\text{within-window bootstrap projector distance})}
+      {\operatorname{median}(\text{between-window same-label projector distance})}.
+\end{equation}
+If estimation noise is not clearly smaller than ordinary between-window change,
+a visually smooth Grassmann trajectory would not be trustworthy.
+
+\section{Positive controls and negative controls}
+
+\subsection{Lightweight known-system recovery}
+
+Run 20 deterministic seeds for each of two stable six-dimensional systems: one
+with real relaxation modes and one with a known conjugate rotational pair.
+Project each latent system into approximately 500 neuronal observables and test
+four observation levels, following the causal ordering of the precedent's
+observation simulation where applicable:
+
+\begin{enumerate}
+  \item continuous Gaussian observations (software upper bound);
+  \item rectified latent rates followed by sparse Poisson/event observations,
+  matched to the empirical zero fraction;
+  \item the same events after a 15-frame Gaussian smoothing approximation; and
+  \item a 0.25-s exponential calcium convolution with matched shot noise.
+\end{enumerate}
+
+This is intentionally smaller than the end-to-end simulator in the parent plan.
+OASIS re-estimation and switching/mode-birth simulations belong to expanded
+validation if this first screen passes. The lightweight test must nevertheless
+show when sparsity or smoothing changes the recovered eigenspectrum.
+
+\subsection{Empirical negative controls}
+
+For each evaluation window, generate 100 neuronwise circular-shift controls
+inside the same continuous, constant-label bout. They preserve each neuron's
+marginal distribution and autocorrelation approximately while disrupting
+synchronous population relationships. Also simulate independent stationary
+event/calcium traces with empirical rates and the same smoothing.
+
+DMD may predict these controls because marginal autocorrelation is genuine. The
+null expectation is instead that full-DMD gain over diagonal AR and reproducible
+rotational/coupled subspaces disappear. A smoothed trace is not validated merely
+because it is easy to forecast.
+
+\section{Predeclared screening gates}
+
+These are feasibility thresholds, not biological hypothesis-test thresholds.
+They are frozen before running the pilot and reported even when they fail.
+
+\begin{gatebox}[Gate 1 --- geometry and numerical health]
+There must be zero snapshot pairs across an acquisition boundary, raw-label
+change, or bootstrap-block join. At least 95\% of evaluation fits must produce
+finite eigenvalues and finite forecasts with complete provenance.
+\end{gatebox}
+
+\begin{gatebox}[Gate 2 --- known-system recovery]
+Across the sparse/calcium-like synthetic observations, at least 80\% of seeds
+must correctly distinguish real-relaxation from rotational systems; median
+$S_{\mathrm{sub}}$ must be at least 0.75; identifiable frequency/decay error must
+be no more than 25\%; and held-out forecast skill must be positive.
+\end{gatebox}
+
+\begin{gatebox}[Gate 3 --- empirical predictive validity]
+At least one arm must have positive median skill over persistence near 1 s, with
+a moving-block-bootstrap lower confidence bound above zero in at least three of
+the four recording--state cells. It must not show systematic forecast failure at
+about 2 s, and fewer than 5\% of fits may be non-finite or explosive.
+\end{gatebox}
+
+\begin{gatebox}[Gate 4 --- empirical reproducibility]
+Median $S_{\mathrm{sub}}$ must be at least 0.80 in at least three of the four
+recording--state cells, and the qualitative spectral class must agree across the
+two deterministic neuron subsets.
+\end{gatebox}
+
+\begin{gatebox}[Gate 5 --- tracking resolution]
+$R_{\mathrm{track}}<0.5$ in both development recordings. If a 300-frame arm
+fails but its prespecified 1,500-frame version passes, the outcome is REVISE the
+window rather than PASS the original sliding-window design.
+\end{gatebox}
+
+\begin{riskbox}[Coordinated-mode interpretation qualifier]
+A claim of multivariate coupling or a reproducible rotational mode additionally
+requires full-DMD gain over diagonal AR, or the relevant rotational statistic,
+to exceed the 95th percentile of the circular-shift null. Failure of this
+qualifier permits only a conditional statement about stable marginal/relaxation
+spectra; it does not satisfy a coordinated-mode claim.
+\end{riskbox}
+
+\section{Decision rule and the review pause}
+
+\begin{longtable}{@{}P{0.17\textwidth}P{0.48\textwidth}P{0.27\textwidth}@{}}
+\toprule
+Decision & Evidence pattern & Authorized next step after review\\
+\midrule
+\endfirsthead
+\toprule
+Decision & Evidence pattern & Authorized next step after review\\
+\midrule
+\endhead
+PASS & At least one arm passes Gates 1--5. Any coordinated-mode claim also
+passes the null qualifier. & Freeze that candidate and propose expanded
+validation on all recordings. Do not start tracking automatically.\\
+CONDITIONAL & Prediction and stability pass, but diagonal/null evidence is weak,
+or only a 1,500-frame/$\Delta F/F$ configuration passes. & Revise signal, window,
+or interpretation; limit the endpoint to reproducible decay/eigenspectrum or
+whole-subspace summaries.\\
+FAIL & Synthetic event recovery fails, no empirical arm beats persistence, or
+subspaces are dominated by estimation/null variation. & Stop intensive DMD;
+report the identifiability bound and retain static rate/covariance or a
+calcium-aware latent-model alternative.\\
+\bottomrule
+\end{longtable}
+
+The implementation phase ends after generating the artifacts below. The user
+reviews the evidence and explicitly decides whether to expand, revise, or stop.
+
+\section{Required implementation artifacts}
+
+All future DMD-specific files remain inside \texttt{DMD/}:
+
+\begin{itemize}
+  \item thin entry point: \texttt{DMD/scripts/00\_initial\_dmd\_validation.py};
+  \item reusable implementation and tests: \texttt{DMD/src/} and
+  \texttt{DMD/tests/};
+  \item immutable run output: \texttt{DMD/results/03\_initial\_validation/}; and
+  \item result report: \texttt{DMD/documents/04\_dmd\_initial\_validation\_results.pdf}.
+\end{itemize}
+
+The result directory must include a machine-readable configuration, software
+versions and seeds, selected-window manifest, per-fit metrics, bootstrap metrics,
+null distributions, and explicit failure records. No DMD implementation will be
+placed in the repository's tutorial \texttt{scripts/}, \texttt{src/funcnet}, or
+general \texttt{results/} directories.
+
+Required report figures, in order, are:
+
+\begin{enumerate}
+  \item signal distributions, zero fraction, autocorrelation, and representative
+  all-neuron/PC traces for each arm;
+  \item the Pachitariu-style discrete-eigenvalue plane and rotation statistic;
+  \item forecast skill versus physical horizon, arm, lag, and rank, with both
+  persistence and diagonal-AR baselines;
+  \item representative held-out PC predictions;
+  \item bootstrap eigenvalue clouds and invariant-subspace stability;
+  \item known-system recovery across observation levels;
+  \item observed versus circular-shift/null multivariate evidence; and
+  \item a traffic-light table showing every gate, exception, and final decision.
+\end{enumerate}
+
+\section{Relationship to the parent analysis plan}
+
+This document is a prospective pilot supplement, not a silent rewrite of
+\path{02_dmd_brain_state_analysis_plan.pdf}. The parent document currently
+names native \texttt{spike\_smoothed}, unscaled centering, and a one-frame lag as
+primary choices. Those choices are now treated as unresolved until this pilot is
+reviewed. Raut et al. remain a benchmark for continuous widefield-$\Delta F/F$
+DMD, not the precedent for DMD on sparse per-neuron events \citep{raut2025}.
+
+If the pilot passes, its locked signal, scaling, lag, rank, estimator, and window
+will be written as a versioned amendment to the parent plan before state labels
+are used for biological comparison. If the pilot fails, the negative result is
+the scientifically correct stopping point.
+
+\clearpage
+\sloppy
+\bibliographystyle{unsrtnat}
+\bibliography{dmd_tracking_references}
+
+\end{document}

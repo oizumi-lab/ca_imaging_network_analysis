@@ -1,0 +1,909 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{libertinus}
+\usepackage{microtype}
+\usepackage[a4paper,margin=19mm,headheight=15pt]{geometry}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{booktabs,longtable,tabularx,array,multirow}
+\usepackage{graphicx,float,placeins,pdflscape}
+\usepackage[most]{tcolorbox}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{hyperref}
+
+\definecolor{navy}{HTML}{163A5F}
+\definecolor{teal}{HTML}{087E8B}
+\definecolor{green}{HTML}{2A7F62}
+\definecolor{orange}{HTML}{D66B18}
+\definecolor{pale}{HTML}{EEF5F7}
+\definecolor{warm}{HTML}{FFF6E8}
+\definecolor{redpale}{HTML}{FFF0F0}
+\definecolor{muted}{HTML}{4B5563}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=navy,
+  citecolor=teal,
+  urlcolor=teal,
+  pdfauthor={DMD initial validation implementation},
+  pdftitle={Initial validation results for DMD on sparse calcium-event data}
+}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{DMD initial validation results}
+\rhead{Accepted run --- 16 July 2026}
+\cfoot{\thepage}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.48em}
+\setlist{nosep,leftmargin=1.6em}
+\renewcommand{\arraystretch}{1.14}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+\newtcolorbox{resultbox}[1][]{breakable,colback=pale,colframe=teal,
+  boxrule=0.8pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,
+  title=#1,fonttitle=\bfseries}
+\newtcolorbox{passbox}[1][]{breakable,colback=green!5,colframe=green,
+  boxrule=0.8pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,
+  title=#1,fonttitle=\bfseries}
+\newtcolorbox{failbox}[1][]{breakable,colback=redpale,colframe=orange,
+  boxrule=0.8pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,
+  title=#1,fonttitle=\bfseries}
+\newtcolorbox{cautionbox}[1][]{breakable,colback=warm,colframe=orange,
+  boxrule=0.8pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,
+  title=#1,fonttitle=\bfseries}
+
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\R}{\mathbb{R}}
+\DeclareMathOperator{\tr}{tr}
+\newcommand{\runid}{20260716T233537+0900\_ca0ddd9\_3dc26e9ab8}
+\newcommand{\runroot}{../results/03_initial_validation/runs/20260716T233537+0900_ca0ddd9_3dc26e9ab8}
+\newcommand{\figfull}[2]{%
+  \begin{figure}[p]
+    \centering
+    \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{#1}
+    \caption{#2}
+  \end{figure}}
+
+\begin{document}
+\hypersetup{pageanchor=false}
+
+\begin{titlepage}
+  \centering
+  \vspace*{1.2cm}
+  {\color{navy}\rule{\textwidth}{1.2pt}}\\[0.9cm]
+  {\Huge\bfseries Initial validation of DMD\\[0.15em]
+  on sparse calcium-event data\par}
+  \vspace{0.45cm}
+  {\Large Step-by-step implementation, diagnostics, controls, and gate decision\par}
+  \vspace{0.8cm}
+  {\color{navy}\rule{\textwidth}{0.6pt}}\\[0.8cm]
+
+  \begin{tcolorbox}[colback=redpale,colframe=orange,width=0.94\textwidth,arc=2pt]
+  \centering
+  {\Large\bfseries Frozen screening decision: FAIL}\\[0.4em]
+  The native deconvolved arm predicts better than persistence, but the pilot
+  fails known-system recovery, invariant-subspace reproducibility, tracking
+  resolution, and the coordinated-mode null qualifier. Intensive sliding-window
+  DMD/Grassmann tracking is not authorized from this checkpoint.
+  \end{tcolorbox}
+
+  \vfill
+  \begin{tabular}{rl}
+    Project: & \texttt{ca\_imaging\_network\_analysis/DMD}\\
+    Report: & Version 1.0\\
+    Accepted run: & \texttt{\runid}\\
+    Date: & 16 July 2026\\
+    Protocol: & \texttt{03\_dmd\_initial\_validation\_plan.pdf}
+  \end{tabular}
+  \vfill
+  {\small Private DMD research artifact; not part of the summer-school tutorial.}
+\end{titlepage}
+
+\hypersetup{pageanchor=true}
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\section{Executive conclusion}
+
+\begin{failbox}[Decision in one sentence]
+The intended 300-frame sliding-window DMD analysis is \textbf{not presently a
+defensible basis for tracking brain-state dynamics}: prediction exists, but the
+dynamic modes are neither recoverable under matched sparse observations nor
+reproducible/resolved well enough for Grassmann-manifold tracking.
+\end{failbox}
+
+This conclusion is deliberately narrower than ``DMD does not work.'' The
+implementation is numerically healthy, reproduces the direct precedent's
+operator, and recovers continuously observed known systems. The failure occurs
+after the latent dynamics are observed as extremely sparse deconvolved events or
+calcium-like traces. In the empirical data, a heavily regularized DMD model often
+beats persistence, but independent per-PC autoregression explains almost all of
+that advantage. Neuronwise negative controls retain similar predictability.
+
+The five frozen gates gave:
+
+\begin{center}
+\begin{tabular}{@{}P{0.37\textwidth}C{0.14\textwidth}P{0.38\textwidth}@{}}
+\toprule
+Gate & Result & Decisive observation\\
+\midrule
+1. Geometry and numerical health & \textcolor{green}{\textbf{PASS}} &
+No illegal joins; 100\% finite; no explosive forecasts.\\
+2. Known-system recovery & \textcolor{orange}{\textbf{FAIL}} &
+Classification 0.55 and median subspace overlap 0.430.\\
+3. Empirical prediction & \textcolor{green}{\textbf{PASS}} &
+Conditional P-arm lower bootstrap bound versus persistence above zero in 4/4
+fixed cells.\\
+4. Empirical reproducibility & \textcolor{orange}{\textbf{FAIL}} &
+0/4 cells reach $S_{\rm sub}\geq0.80$; matching failures occur.\\
+5. Tracking resolution & \textcolor{orange}{\textbf{FAIL}} &
+$R_{\rm track}=0.819$ and $0.854$, versus required $<0.5$.\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+No cell satisfied the additional requirement that full-DMD gain over diagonal
+AR be both positive and above the 95th percentile of the neuronwise
+circular-shift null. Therefore the report supports \emph{forecastable marginal
+relaxation} at most, not coordinated or rotational population modes.
+
+\begin{resultbox}[Recommended pause]
+Do not proceed automatically to all-recording sliding-window DMD or Germain-style
+Grassmann tracking. The user review should decide whether to stop this route or
+commission a new plan for a calcium-aware latent state-space model, coarser
+rate/count observations, or much longer windows. Any revision is a new protocol,
+not a reinterpretation of this failed screen.
+\end{resultbox}
+
+\figfull{\runroot/07_decision/20_gate_summary.png}{Final frozen-gate summary. Green marks the two thresholds that passed; orange marks the three that failed.}
+\FloatBarrier
+
+\section{Scope and interpretation rules}
+
+The pilot tested whether DMD could be a credible measurement tool before asking
+whether awake, NREM, or anaesthesia differ. It did \emph{not} estimate state
+effects. State labels were used only to construct legal constant-label windows
+and to summarize untouched results after development-only model selection.
+
+The direct methodological anchor was the Pachitariu et al. analysis of
+neuronwise RMS-standardized deconvolved activity with lagged ridge DMD
+\citep{pachitariu2026critical}. Standard DMD background follows
+\citet{schmid2010} and \citet{tu2014}. The present pilot adds frozen
+recording-level PCA, contiguous held-out prediction, diagonal-AR baselines,
+known-system observation controls, block bootstrap, proper-subspace projectors,
+equal-neuron subsets, and neuronwise temporal nulls.
+
+Three distinctions govern every interpretation:
+
+\begin{enumerate}
+  \item Beating persistence is evidence of predictability, not necessarily of a
+  multivariate population operator.
+  \item Beating diagonal AR is required for coordinated cross-PC dynamics.
+  \item A smooth-looking subspace trajectory is not trackable unless
+  within-window estimation noise is materially smaller than ordinary
+  between-window variation.
+\end{enumerate}
+
+\section{Audit trail and implementation revisions}
+
+\subsection{Chronology}
+
+Intermediate results were inspected before the next expensive stage. Earlier
+runs were preserved rather than overwritten:
+
+\begin{longtable}{@{}P{0.31\textwidth}P{0.18\textwidth}P{0.42\textwidth}@{}}
+\toprule
+Run & Last completed stage & Purpose / reason superseded\\
+\midrule
+\endfirsthead
+\toprule
+Run & Last completed stage & Purpose / reason superseded\\
+\midrule
+\endhead
+\texttt{20260716T224117\ldots} & Data & First figure geometry check; title/legend layout revised.\\
+\texttt{20260716T224223\ldots} & Preprocessing & PC-trace layout audit; figure spacing revised.\\
+\texttt{20260716T224405\ldots} & Forecast & First full predictive audit; exposed split, long-baseline, and provenance issues.\\
+\texttt{20260716T232145\ldots} & Nulls & Corrected implementation audit; exposed the need to require positive gain in the null qualifier.\\
+\path{20260716T233537+0900_ca0ddd9_3dc26e9ab8} & Decision & Final accepted,
+source-consistent run reported here.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Declared amendments}
+
+Four clarifications were frozen before the first empirical DMD fit: (i) require
+$q\geq8$ for a $k=4$ tracking subspace, (ii) use exact global maximin window
+placement with earliest ties, (iii) make development validation local 80/20 to
+match deployment, and (iv) add a seven-frame stored-smoothing edge sensitivity.
+
+The stepwise audit then produced three explicit corrections before the accepted
+rerun:
+
+\begin{enumerate}
+  \item Gate 2 failed, so downstream stages continued only under the configured
+  label \path{diagnostic_completion_only_not_confirmatory_validation}.
+  \item The edge-trimmed sensitivity now preserves the original frame-240
+  train/test boundary: after retaining frames $[7,293)$, the trimmed-coordinate
+  fitting stop is 233. The earlier implementation had inadvertently moved it.
+  \item The long-block diagonal AR ridge is selected independently within the
+  nested development split. Fourteen of 20 arm-by-cell fits choose a ridge
+  different from the full DMD model.
+\end{enumerate}
+
+The final null qualifier also requires a \emph{positive} full-over-diagonal gain,
+not merely a value above a negative null percentile. Incomplete eigengroup
+matching automatically makes a cell ineligible for Gates 4 and 5.
+
+\section{Data, windows, and leakage safeguards}
+
+\subsection{Recording inventory}
+
+\begin{center}
+\begin{tabular}{@{}lrrrrl@{}}
+\toprule
+Recording & Neurons & Frames & Minutes & Segments & Role\\
+\midrule
+\texttt{example\_data} & 1,000 & 9,350 & 20.37 & 1 & precedent check\\
+\texttt{mouse02\_sleep} & 6,574 & 18,700 & 40.74 & 2 & awake / NREM\\
+\texttt{mouse07\_ane} & 4,337 & 19,000 & 41.39 & 2 & awake / anaesthesia\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+At 7.65 Hz, a 300-frame window lasts 39.22 s. Native-arm models fit the first
+240 frames (31.37 s) and score the final 60 frames (7.84 s). The prespecified
+1,500-frame diagnostic lasts 196.08 s and uses a nested 64/16/20 split.
+
+Six 300-frame windows were selected in each recording--label cell by globally
+maximizing minimum start separation. Chronological positions 1, 3, and 5 are
+development; 2, 4, and 6 are untouched evaluation. No published
+``used-frame'' mask was applied, so the early anaesthesia interval remains
+available. This is appropriate for a general dataset-use tutorial and avoids
+silently deleting transition-related frames.
+
+\figfull{\runroot/00_data/00_window_geometry.png}{Raw state labels, exact development/evaluation windows, acquisition boundaries, and prespecified long blocks before any DMD fit.}
+
+\begin{passbox}[Geometry audit]
+There are 24 deployment windows, 12 development windows, 12 untouched
+evaluation windows, and four long diagnostics. There are zero development--
+evaluation overlaps, zero state-label violations, and zero acquisition-boundary
+crossings. Snapshot pairs are formed separately inside each legal window or
+bootstrap block. Thirteen deployment windows touch the approximate support of
+the stored 15-frame smoother; this motivates the explicit S$z$/S$c$ sensitivity,
+but it does not affect the unsmoothed P arm.
+\end{passbox}
+
+\section{Stage 1: candidate observations and frozen PCA}
+
+Five observation arms were fit from development data only:
+
+\begin{center}
+\begin{tabular}{@{}llP{0.48\textwidth}@{}}
+\toprule
+Arm & Signal / scaling & Purpose\\
+\midrule
+P & deconvolved; RMS+$10^{-3}$ & Pachitariu-aligned anchor\\
+B4 & four-frame event mass; RMS+$10^{-3}$ & coarser mean-rate/count-like arm\\
+S$z$ & stored smoothed; RMS+$10^{-3}$ & code-matched smoothing control\\
+S$c$ & stored smoothed; center only & scaling sensitivity\\
+F & $\Delta F/F$; RMS+$10^{-3}$ & continuous calcium control\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{@{}llrrr@{}}
+\toprule
+Recording & Arm & Exact zeros & Eligible neurons & Lag-1 autocorrelation\\
+\midrule
+\multirow{5}{*}{mouse02 sleep}
+& P  & 98.91\% & 6,553 & 0.125\\
+& B4 & 96.69\% & 6,553 & 0.249\\
+& S$z$ & 90.38\% & 6,556 & 0.979\\
+& S$c$ & 90.38\% & 6,556 & 0.981\\
+& F  & 0\% & 6,574 & 0.699\\
+\midrule
+\multirow{5}{*}{mouse07 anaesthesia}
+& P  & 99.51\% & 4,193 & 0.046\\
+& B4 & 98.31\% & 4,193 & 0.174\\
+& S$z$ & 94.94\% & 4,200 & 0.978\\
+& S$c$ & 94.94\% & 4,200 & 0.979\\
+& F  & 0\% & 4,337 & 0.697\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The event observations are therefore more discontinuous than a simple binary
+description suggests: they are almost always exactly zero, with sparse
+continuous-amplitude events. Stored smoothing and $\Delta F/F$ create strong
+memory, so good persistence forecasts from those arms are not by themselves
+evidence for dynamic modes.
+
+\figfull{\runroot/01_preprocessing/01_signal_diagnostics.png}{Sparsity and pooled within-window autocorrelation for all five candidate observation arms.}
+\figfull{\runroot/01_preprocessing/02_pca_diagnostics.png}{Cumulative development variance in the frozen recording-level PCA bases. The same basis is used for every state and evaluation window of a recording/arm.}
+
+All ten recording--arm PCA bases passed the orthogonality check; the maximum
+Frobenius error was $9.88\times10^{-15}$. No nonfinite neuron was found. The
+heatmaps below include \emph{all} eligible neurons; no 1,000-neuron display cap
+or row sampling is used.
+
+\begin{landscape}
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.98\linewidth,height=0.82\textheight,keepaspectratio]{\runroot/01_preprocessing/03_all_neuron_heatmaps__mouse02_sleep.png}
+\caption{Mouse02 representative untouched windows: every eligible neuron, activity ordered separately within each panel.}
+\end{figure}
+\end{landscape}
+
+\begin{landscape}
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.98\linewidth,height=0.82\textheight,keepaspectratio]{\runroot/01_preprocessing/03_all_neuron_heatmaps__mouse07_ane.png}
+\caption{Mouse07 representative untouched windows: every eligible neuron, including awake and anaesthesia.}
+\end{figure}
+\end{landscape}
+
+\section{Stage 2A: direct-precedent implementation check}
+
+The precedent smoke test retains all 1,000 standardized neuron dimensions in
+\texttt{example\_data}, uses a two-frame lag and raw ridge $\alpha=0.01$, and
+fits 9,348 legal snapshot pairs. The stable thin-SVD operator matches the
+code-style Gram solve with relative Frobenius error
+$1.52\times10^{-14}$. Its spectral radius is 0.658. The implementation is thus
+algebraically faithful to the anchor calculation.
+
+This is not a biological validation: the in-sample normalized residual is
+0.897, and the eigenspectrum alone does not demonstrate held-out utility. The
+audit also retains the precedent discrepancy between the released
+$|\lambda|>0.25$ code filter (577 modes) and a real-part threshold described in
+the caption (421 modes).
+
+\figfull{\runroot/02_precedent/05_precedent_eigenplane.png}{Near-literal precedent check. Rotation summaries count the positive-imaginary member of each conjugate pair once.}
+
+\section{Stage 2B: known-system recovery}
+
+Two six-dimensional stable systems---real relaxation and one containing a known
+rotational pair---were observed through four pipelines over 20 deterministic
+seeds each. Continuous observations provide a software upper bound; event,
+smoothed-event, and calcium observations test identifiability under the present
+measurement problem.
+
+\begin{center}
+\scriptsize
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+System & Observation & Class accuracy & Subspace overlap & Eigenvalue error & Skill vs persistence\\
+\midrule
+Real & continuous & 1.00 & 0.963 & 0.027 & 0.185\\
+Real & event & 0.40 & 0.362 & 0.972 & 0.456\\
+Real & smoothed event & 1.00 & 0.443 & 0.079 & 0.130\\
+Real & calcium & 1.00 & 0.512 & 0.102 & 0.313\\
+Rotational & continuous & 1.00 & 0.998 & 0.017 & 0.656\\
+Rotational & event & 0.90 & 0.367 & 0.949 & 0.484\\
+Rotational & smoothed event & 0.00 & 0.391 & 0.077 & 0.143\\
+Rotational & calcium & 0.00 & 0.674 & 0.227 & 0.351\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Across the transformed observations, classification accuracy is 0.55 and median
+subspace overlap is 0.430, below the frozen 0.80 and 0.75 thresholds.
+Eigenvalue error (0.160) and forecast skill (0.324) pass their components. The
+combination is scientifically important: smoothing/calcium can make a signal
+easy to forecast while erasing the distinction between real and rotational
+dynamics. Forecasting cannot substitute for mode recovery.
+
+The aggregate eigenvalue error also conceals an observation-specific failure:
+event observations have median error 0.954, whereas the smoother observation
+classes pull the transformed-observation aggregate below threshold. The valid
+conclusion is therefore that this observe--PCA--ridge-DMD pipeline does not
+preserve identifiable modes through the tested sparse/calcium-like observation
+maps. It is not evidence that DMD is numerically broken or that no event-data
+DMD method could work.
+
+\figfull{\runroot/03_simulation/06_known_system_recovery.png}{Known-system recovery at four observation levels. Dashed lines show frozen thresholds. Continuous observations validate the software; transformed observations expose the identifiability failure.}
+
+\begin{failbox}[Gate 2 failure and diagnostic override]
+Gate 2 failed before empirical forecasting. Downstream work was nevertheless
+completed because the user requested a full smoke-test diagnosis. Every later
+result is labelled diagnostic and cannot reverse this frozen failure.
+\end{failbox}
+
+\section{Stage 3A: anonymous development selection}
+
+For rank $q$, lag $\ell$, PC score $z_t$, and relative ridge $\eta$, the fitted
+operator is
+\begin{equation}
+  z_{t+\ell}=Bz_t+\varepsilon_t,
+  \qquad
+  \widehat B=YX\T(XX\T+\alpha I)^{-1},
+  \qquad
+  \alpha=\eta\frac{\tr(XX\T)}{q}.
+\end{equation}
+It is computed with a thin SVD rather than an explicit inverse. Development
+selection fits the first 80\% and scores the last 20\% of each of six anonymous
+development windows per recording. Labels do not enter the ranking.
+
+Median development scores selected P globally (0.389), followed by B4 (0.293),
+F (0.214), S$c$ (0.151), and S$z$ (0.128). The chosen P configurations are:
+
+\begin{center}
+\begin{tabular}{@{}llrrrr@{}}
+\toprule
+Recording & Role & $q$ & $\ell$ & $\eta$ & diagonal $\eta$\\
+\midrule
+mouse02 & prediction & 4 & 4 & 1 & $10^{-2}$\\
+mouse02 & tracking & 8 & 2 & $10^{-1}$ & $10^{-4}$\\
+mouse07 & prediction/tracking & 16 & 8 & 1 & 1\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The mouse02 rank-4 winner is prediction-only: a $k=4$ projector in $q=4$ would
+be the identity. Tracking therefore uses the prospectively selected $q=8$
+configuration. Several winners lie at grid boundaries, so the selected ranks
+and lags should not be interpreted as precisely localized biological scales.
+
+\figfull{\runroot/04_forecast/07_development_selection.png}{Anonymous blocked development selection. Hollow circles identify prediction winners; the vertical line marks the minimum rank eligible for a proper $k=4$ tracking subspace.}
+
+\section{Stage 3B--G: untouched empirical forecasts and spectra}
+
+\subsection{Prediction against persistence and diagonal AR}
+
+The P arm's median untouched near-1 s skills are:
+
+\begin{center}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Cell & vs persistence & vs diagonal AR & equal-PC vs persistence\\
+\midrule
+mouse02 awake & 0.449 & $-0.008$ & 0.494\\
+mouse02 NREM & 0.185 & $-0.007$ & 0.044\\
+mouse07 anaesthesia & 0.455 & 0.082 & 0.440\\
+mouse07 awake & 0.516 & 0.009 & 0.511\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+At near 2 s, P remains positive versus persistence in all cells (0.224--0.475),
+but full-over-diagonal gains remain $-0.068$, $-0.001$, 0.004, and 0.089.
+All primary operators, eigenvalues, SSE values, and forecasts are finite; the
+explosive fraction is zero and the maximum spectral radius is below one.
+
+\figfull{\runroot/04_forecast/08_heldout_forecast_skill.png}{Held-out skill over persistence at all representable physical horizons. Bars are medians and dots retain the three untouched window values.}
+
+\begin{landscape}
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.98\linewidth,height=0.82\textheight,keepaspectratio]{\runroot/04_forecast/09_representative_predictions.png}
+\caption{Chronologically earliest untouched-window P forecasts near 1 s. Strong shrinkage toward a near-flat trajectory can beat sparse-signal persistence without reproducing event peaks.}
+\end{figure}
+\end{landscape}
+
+\figfull{\runroot/04_forecast/12_multivariate_gain.png}{Full-DMD skill over the independently tuned diagonal-AR baseline. The P-arm bars are near zero in three cells and modestly positive only in anaesthesia.}
+
+\begin{cautionbox}[What the predictive pass means]
+P meets the frozen conditional persistence criterion, but this is mostly not a
+multivariate DMD effect.
+Persistence carries a sparse event-like PC state forward; a regularized model
+that shrinks toward zero can outperform it. The diagonal AR result and the
+representative trajectories forbid interpreting Gate 3 as evidence for
+coordinated modes. Relative to the training-mean predictor, the cell-median
+near-1 s skill is positive only for mouse02 awake (0.130) and is negative for
+mouse02 NREM ($-0.040$), mouse07 anaesthesia ($-0.100$), and mouse07 awake
+($-0.086$). Thus Gate 3 is a conditional estimator-perturbation pass against
+persistence in these fixed windows, not general predictive validity.
+\end{cautionbox}
+
+\subsection{Discrete spectra}
+
+All selected predictive spectra are plotted directly in the discrete plane.
+The P arm has zero interpretable held-out rotational pairs after requiring
+stability, modulus $>0.25$, and at least three cycles in the fitting window.
+Complex spectra in other arms, especially $\Delta F/F$, are not sufficient to
+override their development ranking, baseline performance, or the known-system
+failure.
+
+\begin{landscape}
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.98\linewidth,height=0.82\textheight,keepaspectratio]{\runroot/04_forecast/10_heldout_eigenplanes.png}
+\caption{Selected predictive-configuration spectra in all untouched windows. The unit circle is shown; points are discrete-lag eigenvalues.}
+\end{figure}
+\end{landscape}
+
+\subsection{Long-block diagnostic}
+
+The prespecified long blocks improve P's persistence skill most strongly in
+mouse02 NREM, from 0.185 to 0.443. However, these fits reselect larger
+cell-specific models (often $q=32$) and therefore combine more temporal support
+with a larger search space. Their full-over-diagonal gains remain only 0.009 to
+0.066 after independent diagonal-ridge tuning.
+
+\begin{center}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+Cell & W=300 skill & W=1500 skill & Long $q$ & Long $\ell$ & Long vs diagonal\\
+\midrule
+mouse02 awake & 0.449 & 0.482 & 32 & 8 & 0.012\\
+mouse02 NREM & 0.185 & 0.443 & 32 & 4 & 0.023\\
+mouse07 anaesthesia & 0.455 & 0.471 & 32 & 4 & 0.066\\
+mouse07 awake & 0.516 & 0.450 & 16 & 8 & 0.009\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\figfull{\runroot/04_forecast/11_long_block_diagnostic.png}{Cell-level comparison of 300-frame and separately selected 1,500-frame models. Points above the diagonal improve with the longer diagnostic; this is not a pure window-length contrast.}
+
+\subsection{Stored-smoothing boundary sensitivity}
+
+After trimming seven frames at both edges while preserving the original split,
+median near-1 s persistence skill changes as follows:
+
+\begin{center}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Cell & S$z$ primary & S$z$ trimmed & S$c$ primary & S$c$ trimmed\\
+\midrule
+mouse02 awake & 0.168 & 0.160 & 0.335 & 0.336\\
+mouse02 NREM & $-0.058$ & 0.076 & $-0.269$ & 0.121\\
+mouse07 anaesthesia & 0.271 & 0.263 & 0.150 & 0.177\\
+mouse07 awake & 0.268 & 0.308 & 0.370 & 0.340\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The sign reversals in mouse02 NREM make stored-smoothed conclusions
+boundary-sensitive. The full-range plot retains severe individual-window
+failures rather than clipping them; the table supplies the robust cell medians.
+
+\figfull{\runroot/04_forecast/13_smoothing_trim_sensitivity.png}{Primary versus fixed-split edge-trimmed skill for every untouched S$z$/S$c$ window. Extreme negative values are deliberately retained.}
+
+\section{Stage 4: bootstrap prediction and mode reproducibility}
+
+\subsection{Moving-block forecast uncertainty}
+
+Each evaluation-window fitting segment was resampled 100 times in moving blocks
+of at least 15 native frames. Pairs were created only inside blocks. Repetition
+$b$ was synchronized across the three evaluation windows, their cell median was
+taken, and percentile intervals were then computed. These intervals quantify
+operator-estimation uncertainty for the fixed selected windows; they are not
+population-level confidence intervals over animals. They condition on the
+frozen PCA basis, hyperparameters, windows, and test tails and do not include
+test-origin, window-selection, neuron-sampling, preprocessing-choice, or
+model-selection uncertainty.
+
+\begin{center}
+\scriptsize
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Cell & 1-s bootstrap median & 95\% interval & full-over-diagonal 95\% interval\\
+\midrule
+mouse02 awake & 0.450 & [0.445, 0.452] & [$-0.021$, 0.001]\\
+mouse02 NREM & 0.183 & [0.169, 0.196] & [$-0.033$, 0.026]\\
+mouse07 anaesthesia & 0.452 & [0.443, 0.460] & [0.035, 0.091]\\
+mouse07 awake & 0.510 & [0.497, 0.519] & [$-0.030$, 0.011]\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Thus the conditional interval excludes zero versus persistence for all four
+fixed cells, while only anaesthesia has a positive full-over-diagonal interval.
+
+\figfull{\runroot/05_stability/14_bootstrap_forecast_intervals.png}{Synchronized moving-block intervals for P-arm skill over persistence at the near-1 s and near-2 s gates.}
+
+\subsection{Fixed-reference invariant subspaces}
+
+For each recording, a development-only pooled operator defines $k=4$ real
+invariant dimensions ranked by mean modal-coefficient energy. Conjugate pairs
+are never split. Evaluation and bootstrap eigengroups are matched to these fixed
+groups; no evaluation fit is allowed to re-rank a convenient subspace.
+
+This frozen target itself requires caution. Modal-coefficient energy is based on
+the pseudoinverse of the eigenvector matrix and can be ill-conditioned or
+non-additive for nonnormal/repeated modes. Mouse07's selected target comprises
+two complex pairs with $|\lambda|\simeq0.077$ and 0.196, both below the
+protocol's $|\lambda|>0.25$ interpretability cutoff and rapidly attenuated at
+the selected eight-frame lag. Mouse02 also includes modes at 0.242 and 0.283.
+Low stability therefore characterizes this prespecified tracking object; it is
+not proof that no other dynamical representation exists.
+
+Projector similarity and distance are
+\begin{equation}
+ S_{\rm sub}=\frac{1}{k}\tr(PP^{(b)}),
+ \qquad
+ d_P=\sqrt{\max(0,1-S_{\rm sub})}.
+\end{equation}
+
+\begin{center}
+\scriptsize
+\begin{tabular}{@{}lrrrrl@{}}
+\toprule
+Cell & Median $S_{\rm sub}$ & Within $d_P$ & Match fraction & Min. windows/rep & Gate eligible\\
+\midrule
+mouse02 awake & 0.535 & 0.549 & 0.670 & 1 & no\\
+mouse02 NREM & 0.500 & 0.570 & 0.813 & 1 & no\\
+mouse07 anaesthesia & 0.238 & 0.754 & 1.000 & 3 & yes\\
+mouse07 awake & 0.262 & 0.753 & 1.000 & 3 & yes\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Mouse02's development reference selects four real one-dimensional groups, but
+some evaluation/bootstrap fits resolve complex pairs instead. The
+dimension-compatible matcher correctly refuses to coerce them. There are 157
+recorded original/bootstrap matching failures. The two fully eligible mouse07
+cells remain far below 0.80, so no cell passes the reproducibility threshold.
+Reported summaries condition on successful matches and are mildly optimistic:
+the assignment cost itself includes a 0.25-weighted version of the reported
+subspace-overlap endpoint.
+
+\figfull{\runroot/05_stability/15_subspace_stability.png}{Similarity to the fixed development reference for original evaluation fits and moving-block fits. Unmatched fits are recorded as failures and excluded from boxes, making the table's eligibility columns essential.}
+
+\subsection{Tracking resolution}
+
+The future tracking criterion compares within-window estimation distance with
+ordinary same-label between-window distance:
+\begin{equation}
+ R_{\rm track}=\frac{\operatorname{median}(d_P^{\rm bootstrap})}
+ {\operatorname{median}(d_P^{\rm between})}.
+\end{equation}
+
+Mouse02 has $R_{\rm track}=0.819$ but is ineligible because only four of six
+original evaluation projectors match. Mouse07 is eligible and has
+$R_{\rm track}=0.854$. Both exceed the 0.5 ceiling. Estimation noise is nearly as
+large as ordinary window-to-window change; a visually smooth Grassmann path
+would not be trustworthy. The between-window distances (approximately 0.685
+and 0.879) are also close to independent-random-subspace expectations for the
+respective $(q,k)$ dimensions (approximately 0.707 and 0.866).
+
+\figfull{\runroot/05_stability/16_tracking_resolution.png}{Tracking-resolution components and ratios. The dashed line is the frozen $R_{\rm track}<0.5$ threshold.}
+
+\subsection{Two disjoint neuron subsets}
+
+Two deterministic, disjoint 2,000-neuron subsets were independently reduced to
+the selected tracking rank. Their majority qualitative classes agree in all
+cells: resolved rotation for mouse02 awake and no resolved rotation for the
+other three cells. Agreement is useful but insufficient: it does not fix low
+reference similarity or poor tracking resolution.
+
+\figfull{\runroot/05_stability/17_neuron_subset_classes.png}{Qualitative spectral class in two equal-size disjoint neuron subsets.}
+
+\section{Stage 5: empirical negative controls}
+
+For every evaluation window, 100 neuronwise circular shifts were generated
+inside the same acquisition-split, constant-label bout, with at least a
+15-frame phase displacement. They preserve each neuron's empirical marginal and
+autocorrelation approximately while disrupting synchrony. A second set of 100
+stationary controls draws independently from each neuron's within-bout empirical
+marginal. Both pass through the same frozen scaling, PCA, selected predictive
+model, tracking model, and scoring pipeline.
+
+Circular shifts remain predictively useful versus persistence: their median
+skills are 0.320, 0.366, 0.456, and 0.457 across the four cells. Stationary-IID
+controls are similarly positive (0.331, 0.370, 0.467, and 0.468). This directly
+demonstrates that the empirical persistence result does not require preserved
+population synchrony or temporal dynamics; on a 99.2\%-zero signal, shrinkage
+toward equilibrium can by itself beat persistence.
+
+\begin{center}
+\scriptsize
+\begin{tabular}{@{}lrrrrl@{}}
+\toprule
+Cell & Observed full/diag & Circular median & Circular 95th & Positive? & Qualifier\\
+\midrule
+mouse02 awake & $-0.008$ & $-0.089$ & $-0.028$ & no & fail\\
+mouse02 NREM & $-0.007$ & $-0.037$ & $-0.006$ & no & fail\\
+mouse07 anaesthesia & 0.082 & 0.188 & 0.235 & yes & fail\\
+mouse07 awake & 0.009 & 0.023 & 0.040 & yes & fail\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Mouse02 awake is above a negative null percentile, but its observed gain is
+itself negative and therefore cannot qualify. In the two positive cells, the
+observed value is below the circular 95th percentile. Zero of four cells pass.
+
+\begin{landscape}
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.98\linewidth,height=0.82\textheight,keepaspectratio]{\runroot/06_nulls/18_null_multivariate_gain.png}
+\caption{Observed full-over-diagonal skill (orange) against synchronized cell-level circular-shift and stationary-null distributions.}
+\end{figure}
+\end{landscape}
+
+Null subspace similarity is also comparable to the already-low observed value,
+especially in mouse02. Neither observed nor null distributions approach the
+Gate-4 threshold.
+
+\figfull{\runroot/06_nulls/19_null_subspace_similarity.png}{Similarity to the fixed development reference under circular and stationary controls. Orange lines are original evaluation medians; dashed lines mark 0.80.}
+
+\section{Final gate application}
+
+\begin{longtable}{@{}P{0.18\textwidth}P{0.25\textwidth}P{0.34\textwidth}C{0.11\textwidth}@{}}
+\toprule
+Gate & Frozen threshold & Observed & Result\\
+\midrule
+\endfirsthead
+\toprule
+Gate & Frozen threshold & Observed & Result\\
+\midrule
+\endhead
+1. Geometry / numerics & Zero illegal joins; at least 95\% finite &
+Zero illegal geometry; 100\% finite; zero bootstrap joins; zero explosions &
+\textcolor{green}{PASS}\\
+2. Known systems & Class $\geq0.80$; $S_{\rm sub}\geq0.75$; eigenvalue error $\leq0.25$; skill $>0$ &
+0.55; 0.430; 0.160; 0.324 & \textcolor{orange}{FAIL}\\
+3. Prediction & Lower bound $>0$ in at least 3/4 cells; no 2-s failure; $<5\%$ explosive &
+4/4; 4/4 positive at 2 s; 0\% explosive & \textcolor{green}{PASS}\\
+4. Reproducibility & Median $S_{\rm sub}\geq0.80$ in at least 3/4; subset class agreement &
+0/4; subset classes agree 4/4 but matching fails & \textcolor{orange}{FAIL}\\
+5. Resolution & $R_{\rm track}<0.5$ in both recordings &
+0.819 (ineligible) and 0.854 & \textcolor{orange}{FAIL}\\
+\bottomrule
+\end{longtable}
+
+The frozen rule assigns \textbf{FAIL} if sparse/calcium-like known-system
+recovery fails, even when empirical prediction passes. Gates 4 and 5 independently
+reach the same practical conclusion. The coordinated-mode qualifier fails in
+all four cells.
+
+\begin{failbox}[Authorized conclusion]
+The data contain forecastable temporal structure, but this pilot cannot identify
+or track reproducible DMD modes at the proposed 300-frame resolution. Do not
+claim awake/NREM/anaesthesia differences in DMD eigenvalues or subspaces from
+this implementation, and do not proceed to intensive Grassmann tracking without
+a newly reviewed measurement/window model.
+\end{failbox}
+
+\section{Limitations and defensible next options}
+
+\subsection{What this pilot does not prove}
+
+\begin{itemize}
+  \item It does not prove that the underlying neural dynamics are non-linear or
+  lack low-dimensional structure; it shows that the present observation/window
+  pipeline cannot recover that structure reliably.
+  \item It does not compare brain states statistically. Only two recordings and
+  three fixed evaluation windows per cell were used.
+  \item Bootstrap intervals condition on the selected windows and PCA basis.
+  They quantify conditional operator-estimation perturbations, not uncertainty
+  from test origins, window/neuron selection, preprocessing, model selection,
+  animals, or experiments.
+  \item The 1,500-frame diagnostic reselects ranks up to 32 and cannot isolate
+  window length from model capacity.
+  \item Stored smoothing can borrow support near label boundaries; the fixed
+  edge trim reveals sensitivity but does not reconstruct the upstream smoother.
+  \item Circular shifts use periodic wrap inside a legal bout. No shifted sample
+  leaves the state/acquisition bout, but the wrap is a known surrogate artefact.
+\end{itemize}
+
+\subsection{If the project is revisited}
+
+The most defensible new work would begin with a separate, prospectively frozen
+plan and one of the following endpoints:
+
+\begin{enumerate}
+  \item a calcium-aware latent state-space/switching model fitted to fluorescence
+  or deconvolution uncertainty, with simulation-calibrated identifiability;
+  \item coarser event-count/rate observations and much longer windows, with the
+  affine mean and diagonal baselines retained as primary comparators;
+  \item static or slowly varying rate/covariance summaries if the scientific aim
+  is brain-state characterization rather than modal dynamics;
+  \item if modal tracking is retained, a prospectively eligible slow/predictive
+  spectral cluster represented by ordered real-Schur subspaces, allowing
+  real--complex transitions without post-hoc mode re-ranking; or
+  \item additional recordings and animal-level validation before any state
+  effect claim.
+\end{enumerate}
+
+The P arm may remain useful for a prediction benchmark, but the present results
+do not justify using its eigenvectors as biological objects.
+
+\section{Reproducibility and artifact inventory}
+
+The final run contains 109 files (approximately 40 MB) across eight completed
+stages. Generated results remain inside the private \texttt{DMD/} tree. The
+accepted implementation-tree SHA-256 is:
+\begin{center}
+\small\texttt{95ee656eb4c9057fc004b76aebcd670418826be37bc620fc7afb470ebdca48f0}
+\end{center}
+It matches the current 24 hashed files under \texttt{DMD/src},
+\texttt{DMD/scripts}, \texttt{DMD/tests}, and \texttt{DMD/configs}. The frozen
+configuration hash is stored in \texttt{config\_frozen.json}; the Git revision
+is:
+\begin{center}
+\small\texttt{ca0ddd9670b64bfbe8fd3565d005cb324642964d}
+\end{center}
+Because the DMD files are currently untracked, content hashes---not the Git
+revision alone---identify the implementation.
+
+Verification commands:
+\begin{verbatim}
+PYTHONPATH=DMD/src poetry run python -m unittest discover -s DMD/tests -v
+poetry run ruff check DMD/src DMD/scripts DMD/tests
+\end{verbatim}
+All 25 tests pass and Ruff reports no violations. Tests cover selective HDF5
+orientation, window legality, deterministic maximin placement, per-window B4,
+frozen RMS scaling/PCA, known linear recovery, ridge scale invariance, exact
+forecast powers, no cross-segment pairs, conjugate grouping, rejection of
+full-space projectors, projector geometry, fixed-reference matching, no
+bootstrap-block joins, within-bout circular shifts, stationary null sampling,
+fixed split preservation, independent long-block diagonal selection, and
+synchronized cell summaries.
+
+Primary machine-readable entry points are:
+\begin{itemize}
+  \item \texttt{active\_run.json} --- accepted run pointer;
+  \item \texttt{stage\_status.json} --- timestamps and stage summaries;
+  \item \texttt{software\_manifest.json} --- versions and per-file hashes;
+  \item \texttt{selection\_manifest.json} --- development-only winners;
+  \item \texttt{predictive\_bootstrap\_cell\_summary.csv};
+  \item \texttt{tracking\_stability\_cell\_summary.csv};
+  \item \texttt{tracking\_resolution\_summary.csv};
+  \item \texttt{negative\_control\_cell\_summary.csv}; and
+  \item \texttt{final\_decision.json}.
+\end{itemize}
+
+\appendix
+\section{Additional PC-trace diagnostics}
+
+\begin{landscape}
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.98\linewidth,height=0.82\textheight,keepaspectratio]{\runroot/01_preprocessing/04_pc_traces__mouse02_sleep.png}
+\caption{Mouse02 first four frozen-basis PC traces for every arm and state.}
+\end{figure}
+\end{landscape}
+
+\begin{landscape}
+\begin{figure}[p]
+\centering
+\includegraphics[width=0.98\linewidth,height=0.82\textheight,keepaspectratio]{\runroot/01_preprocessing/04_pc_traces__mouse07_ane.png}
+\caption{Mouse07 first four frozen-basis PC traces for every arm and state.}
+\end{figure}
+\end{landscape}
+
+\section{Exact selected window intervals}
+
+All intervals below are zero-based and half-open:
+
+\begin{longtable}{@{}llP{0.65\textwidth}@{}}
+\toprule
+Recording & Label & Chronological 300-frame windows\\
+\midrule
+\endfirsthead
+\toprule
+Recording & Label & Chronological 300-frame windows\\
+\midrule
+\endhead
+mouse02 & awake &
+D $[302,602)$; E $[2881,3181)$; D $[5962,6262)$; E $[9350,9650)$;
+D $[11929,12229)$; E $[14508,14808)$\\
+mouse02 & NREM &
+D $[961,1261)$; E $[3897,4197)$; D $[7178,7478)$; E $[10270,10570)$;
+D $[15464,15764)$; E $[18400,18700)$\\
+mouse07 & awake &
+D $[0,300)$; E $[1840,2140)$; D $[3680,3980)$; E $[5520,5820)$;
+D $[7360,7660)$; E $[9200,9500)$\\
+mouse07 & anaesthesia &
+D $[9500,9800)$; E $[11340,11640)$; D $[13180,13480)$; E $[15020,15320)$;
+D $[16860,17160)$; E $[18700,19000)$\\
+\bottomrule
+\end{longtable}
+
+Long blocks are mouse02 awake $[12465,13965)$, mouse02 NREM
+$[16918,18418)$, mouse07 awake $[4000,5500)$, and mouse07 anaesthesia
+$[13500,15000)$.
+
+\bibliographystyle{unsrtnat}
+\bibliography{dmd_tracking_references}
+
+\end{document}
