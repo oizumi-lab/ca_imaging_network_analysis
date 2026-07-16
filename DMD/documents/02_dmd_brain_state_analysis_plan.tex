@@ -1,0 +1,655 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{libertinus}
+\usepackage{microtype}
+\usepackage[a4paper,margin=21mm,headheight=15pt]{geometry}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{booktabs,longtable,tabularx,array,multirow}
+\usepackage{enumitem}
+\usepackage[most]{tcolorbox}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{hyperref}
+
+\definecolor{navy}{HTML}{163A5F}
+\definecolor{teal}{HTML}{087E8B}
+\definecolor{green}{HTML}{2A7F62}
+\definecolor{pale}{HTML}{EEF5F7}
+\definecolor{warm}{HTML}{FFF6E8}
+\definecolor{redpale}{HTML}{FFF0F0}
+\definecolor{muted}{HTML}{4B5563}
+\hypersetup{colorlinks=true,linkcolor=navy,citecolor=teal,urlcolor=teal,pdfauthor={DMD brain-state analysis planning},pdftitle={Preregistered analysis plan: sliding-window DMD tracking in calcium imaging}}
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{DMD brain-state analysis plan}
+\rhead{Version 1.0 --- 16 July 2026}
+\cfoot{\thepage}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.52em}
+\setlist{nosep,leftmargin=1.6em}
+\renewcommand{\arraystretch}{1.17}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\newtcolorbox{decisionbox}[1][]{breakable,colback=pale,colframe=teal,boxrule=0.75pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,title=#1,fonttitle=\bfseries}
+\newtcolorbox{gatebox}[1][]{breakable,colback=green!5,colframe=green,boxrule=0.75pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,title=#1,fonttitle=\bfseries}
+\newtcolorbox{riskbox}[1][]{breakable,colback=warm,colframe=orange!70!black,boxrule=0.75pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,title=#1,fonttitle=\bfseries}
+\newtcolorbox{stopbox}[1][]{breakable,colback=redpale,colframe=red!65!black,boxrule=0.75pt,arc=2pt,left=7pt,right=7pt,top=6pt,bottom=6pt,title=#1,fonttitle=\bfseries}
+
+\newcommand{\dd}{\,\mathrm{d}}
+\newcommand{\T}{^{\mathsf T}}
+\newcommand{\Hh}{^{\mathsf H}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\C}{\mathbb{C}}
+\DeclareMathOperator{\Log}{Log}
+
+\begin{document}
+\hypersetup{pageanchor=false}
+
+\begin{titlepage}
+  \centering
+  \vspace*{1.8cm}
+  {\color{navy}\rule{\textwidth}{1.2pt}}\\[1.0cm]
+  {\Huge\bfseries Sliding-window DMD tracking of\\[0.2em]
+  calcium-imaging dynamics across brain states\par}
+  \vspace{0.6cm}
+  {\Large A preregistration-style analysis and validation plan\par}
+  \vspace{0.9cm}
+  {\color{navy}\rule{\textwidth}{0.6pt}}\\[0.9cm]
+  \begin{tcolorbox}[colback=pale,colframe=teal,width=0.92\textwidth,arc=2pt]
+  \centering
+  \textbf{Plan before implementation.} This document fixes the scientific questions, estimands, admissible preprocessing, window geometry, validation gates, and inferential unit. No new analysis has been run.
+  \end{tcolorbox}
+  \vfill
+  \begin{tabular}{rl}
+    Project: & \texttt{ca\_imaging\_network\_analysis}\\
+    Version: & 1.0\\
+    Date: & 16 July 2026\\
+    Evidence review: & \texttt{01\_dmd\_tracking\_literature\_survey.pdf}
+  \end{tabular}
+  \vfill
+\end{titlepage}
+
+\hypersetup{pageanchor=true}
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\section{Decision summary}
+
+\begin{decisionbox}[Primary design]
+Fit low-rank, noise-aware DMD to the \emph{neuron-resolved} event-rate-proxy matrix in contiguous, state-pure windows. Compare window operators with exact spectral--Grassmann optimal transport (SGOT) where its left/right spectral-projector requirements are met; separately track stable conjugate/invariant subspaces with a global birth/death-aware min-cost-flow extension. Perform biological inference on within-mouse awake--NREM and awake--anaesthesia contrasts, never on the number of overlapping windows.
+\end{decisionbox}
+
+The default signal is the repository's OASIS-derived \texttt{spike\_smoothed} matrix, sampled at 7.65 Hz, because it preserves one observable per neuron and already represents the project's rate-like activity \citep{friedrich2017,kiyooka2026}. It will be called a \emph{deconvolved event-rate proxy}, not an absolute firing rate. The across-neuron population mean is a baseline and covariate, not the DMD state.
+
+The primary window is 300 frames (39.2 s), with a 38-frame hop (4.97 s) for descriptive trajectories. This is aligned with the dataset's minimum 300-frame state-persistence rule and retains all animals. Non-overlapping windows and mouse-aggregated bout summaries provide inference. Spectra below roughly three cycles per window ($3/W=0.0765$ Hz) will not receive a primary physiological interpretation. Longer 600- and 1,500-frame windows test slower dynamics only in eligible bouts; a 150-frame window tests temporal localization at the cost of a higher frequency floor.
+
+Raut et al.'s exact rank-2 randomized DMD is a benchmark, not the assumed optimum \citep{raut2025}. A state-blind pilot will select among forward--backward/total-least-squares, subspace, and bagged optimized DMD using contiguous held-out prediction, bootstrap stability, and simulation recovery \citep{dawson2016,hemati2017,takeishi2017,askham2018,sashidhar2022}. Rank is fixed within a configuration and selected without access to state separability.
+
+\section{Scientific objective, questions, and hypotheses}
+
+\subsection{Objective}
+
+Characterize how local linear dynamical structure changes between wakefulness and reduced-consciousness states in wide-field, single-cell-resolution cortical calcium imaging, and determine whether those changes are shared between NREM sleep and isoflurane anaesthesia. ``Dynamical structure'' refers jointly to generator eigenvalues, invariant spatial subspaces, modal stability/energy, operator-to-operator distance, and the temporal persistence or reconfiguration of well-resolved modes.
+
+This is an observational comparison. It cannot establish that a DMD feature is a mechanism or a unique marker of consciousness.
+
+\subsection{Primary questions}
+
+\begin{enumerate}
+  \item Within a recording, are window-specific DMD operators more similar within a behavioural state than across awake and target state?
+  \item Which spectral, spatial, and tracking summaries differ for awake versus NREM, and awake versus anaesthesia?
+  \item Does operator/subspace reconfiguration increase near annotated transitions relative to matched stationary times?
+  \item Do NREM and anaesthesia produce concordant awake-referenced changes in a common, coordinate-invariant feature space?
+  \item Do DMD-derived features add information beyond mean activity, active fraction, global slow power, autocorrelation, and covariance/PCA structure?
+\end{enumerate}
+
+\subsection{Preregistered directional hypotheses}
+
+\begin{description}[style=nextline,leftmargin=1.5em]
+  \item[H1 --- operator separation.] Between-state SGOT distances will exceed the pooled within-state dispersion in the same recording.
+  \item[H2 --- dynamical repertoire.] NREM and anaesthesia will show altered near-neutral spectral mass, effective mode number, and within-state operator dispersion relative to their paired awake periods. Direction is not fixed for individual spectral summaries because calcium smoothing and event sparsity make prior evidence insufficient.
+  \item[H3 --- transition reconfiguration.] SGOT step size and dominant-subspace velocity will be larger near annotated state transitions than at duration- and state-matched pseudo-transitions.
+  \item[H4 --- partial commonality.] Awake-referenced feature-effect vectors for NREM and anaesthesia will point in a concordant, but not necessarily identical, direction. This is exploratory because protocols and animals differ.
+  \item[H5 --- incremental dynamics.] State information from DMD features will remain above label-permutation expectation after controlling or matching for population mean rate, active fraction, global PC power, and autocorrelation.
+\end{description}
+
+\section{Dataset audit and admissible comparisons}
+
+\subsection{Acquisition and stored variables}
+
+The recordings contain layer 2/3 cortical activity over a contiguous 3$\times$3-mm field of view at 7.65 frames/s, with 4,337--10,197 ROIs per session \citep{kiyooka2026}. Preprocessing includes motion correction, ROI extraction, neuropil correction, $\Delta F/F$, OASIS deconvolution, and a 15-frame (1.96-s) Gaussian-smoothed event proxy. The analysis files expose at least \texttt{dFF}, \texttt{spike\_deconv}, \texttt{spike\_smoothed}, state labels, \texttt{used\_frame}, and acquisition boundaries.
+
+Sleep labels are awake (0), quiet awake (0.5), NREM (1), and REM (2). Anaesthesia labels are awake (0) and anaesthesia (1). State scoring used approximately four-second epochs; very short epochs were consolidated, and \texttt{used\_frame} retains awake or target-state frames with at least 300 frames of persistence. Acquisition discontinuities are recorded separately and must be respected.
+
+\subsection{Recording inventory}
+
+\begin{longtable}{@{}P{0.25\textwidth}rrrrP{0.18\textwidth}@{}}
+\toprule
+Session & ROIs & Frames & Minutes & Awake used & Target used\\
+\midrule
+\endfirsthead
+\toprule
+Session & ROIs & Frames & Minutes & Awake used & Target used\\
+\midrule
+\endhead
+mouse01 sleep & 7,843 & 9,350 & 20.4 & 2,359 & 5,027 NREM\\
+mouse02 sleep & 6,574 & 18,700 & 40.7 & 7,000 & 8,375 NREM\\
+mouse03 sleep & 7,112 & 18,700 & 40.7 & 1,549 & 12,527 NREM\\
+mouse04 day 1 sleep & 9,612 & 18,700 & 40.7 & 2,008 & 11,502 NREM\\
+mouse04 day 2 sleep & 10,197 & 24,000 & 52.3 & 9,235 & 6,557 NREM\\
+mouse05 sleep & 7,355 & 19,000 & 41.4 & 9,146 & 5,660 NREM\\
+mouse03 anaesthesia & 7,350 & 19,000 & 41.4 & 9,500 & 8,263 anaesthesia\\
+mouse05 anaesthesia & 6,592 & 19,562 & 42.6 & 15,528 & 2,933 anaesthesia\\
+mouse06 anaesthesia & 5,295 & 24,492 & 53.4 & 8,762 & 13,789 anaesthesia\\
+mouse07 anaesthesia & 4,337 & 19,000 & 41.4 & 9,500 & 8,500 anaesthesia\\
+\bottomrule
+\end{longtable}
+
+The sleep cohort has five unique mice and six sessions because mouse04 was recorded on two days. The anaesthesia cohort has four mice. Mouse03 and mouse05 occur in both paradigms, but only two cross-paradigm mice are insufficient for a confirmatory three-state repeated-measures test.
+
+\subsection{Primary-window feasibility audit}
+
+The following counts were computed by splitting state labels at every state change and acquisition boundary, then placing 300-frame windows only within each resulting run. ``Overlap'' uses the planned 38-frame hop; ``disjoint'' uses a 300-frame hop and is the maximum simple non-overlap count before balancing.
+
+\begin{longtable}{@{}P{0.28\textwidth}rrrr@{}}
+\toprule
+Session & Awake overlap & Target overlap & Awake disjoint & Target disjoint\\
+\midrule
+\endfirsthead
+\toprule
+Session & Awake overlap & Target overlap & Awake disjoint & Target disjoint\\
+\midrule
+\endhead
+mouse01 sleep & 32 & 95 & 6 & 15\\
+mouse02 sleep & 133 & 140 & 20 & 23\\
+mouse03 sleep & 18 & 240 & 3 & 36\\
+mouse04 day 1 sleep & 17 & 220 & 5 & 34\\
+mouse04 day 2 sleep & 140 & 99 & 23 & 18\\
+mouse05 sleep & 162 & 75 & 27 & 14\\
+mouse03 anaesthesia & 243 & 195 & 31 & 26\\
+mouse05 anaesthesia & 394 & 70 & 51 & 9\\
+mouse06 anaesthesia & 171 & 340 & 25 & 44\\
+mouse07 anaesthesia & 243 & 216 & 31 & 28\\
+\bottomrule
+\end{longtable}
+
+These counts demonstrate feasibility, not statistical sample size. In particular, mouse03 sleep contributes only three disjoint awake windows, and mouse05 anaesthesia contributes only nine disjoint anaesthesia windows. Analyses will balance states within session by duration/bout-aware resampling and report these limitations.
+
+\subsection{Confirmatory and exploratory contrasts}
+
+\begin{decisionbox}[Confirmatory estimands]
+\begin{itemize}
+  \item Sleep: paired awake versus NREM effects within each sleep session, with mouse04's two days aggregated before the group summary.
+  \item Anaesthesia: paired pre-/interspersed awake versus 0.6\% isoflurane effects within each anaesthesia session.
+\end{itemize}
+\end{decisionbox}
+
+A raw pooled awake--NREM--anaesthesia classifier is not confirmatory. Sleep was recorded in the light phase and anaesthesia in the dark phase; induction order, session structure, and animal membership also differ. Direct NREM--anaesthesia similarity will be assessed only on awake-referenced effect vectors in shared scalar feature space, with explicit protocol/circadian caveats. The two mice appearing in both paradigms receive descriptive paired plots, not a population claim.
+
+REM and quiet awake are excluded from primary state fits because available durations are sparse and uneven. Quiet awake can serve as a sensitivity condition for arousal/movement confounding. REM is descriptive only if a session contains enough admissible windows under the locked configuration.
+
+\section{Signal construction and preprocessing}
+
+\subsection{Primary observation matrix}
+
+For session $s$ with $N_s$ fixed ROIs, define
+\begin{equation}
+  x_s(t)=\left[r_{s1}(t),\ldots,r_{sN_s}(t)\right]\T\in\R^{N_s},
+\end{equation}
+using \texttt{spike\_smoothed}. No averaging over neurons occurs before DMD. The mean
+\begin{equation}
+  \bar r_s(t)=N_s^{-1}\sum_{i=1}^{N_s}r_{si}(t)
+\end{equation}
+is retained as a baseline feature. This separation implements the correct lesson from Raut: their scalar population rate was an arousal observable, whereas their DMD input retained spatial degrees of freedom \citep{raut2025}.
+
+\subsection{ROI panel}
+
+The primary panel contains all session-level quality-controlled ROIs except rows that are numerically constant across the entire admissible recording. The exclusion rule is state blind and fixed before window extraction. The published \texttt{nonzero\_ROI} mask will not be used by default because it was defined for the original functional-network windows and can induce state/activity-dependent selection. Sensitivity analyses will use:
+
+\begin{itemize}
+  \item a stricter recording-level activity criterion applied identically to all states;
+  \item equal-$N$ random neuron subsamples, repeated with fixed seeds; and
+  \item optional spatial coarse-graining to a common grid.
+\end{itemize}
+
+No ROI may enter or leave the panel from one primary window to another within a session; otherwise apparent subspace rotation could be a changing coordinate system.
+
+\subsection{Centering and scaling}
+
+The primary dynamical matrix subtracts one recording-level temporal mean per neuron, computed over all admissible frames without using labels. It does not divide each window by its own variance. This preserves state-dependent offsets and relative variability while avoiding a large recording-wide intercept. Two declared arms are:
+
+\begin{enumerate}
+  \item \textbf{mean-centred, unscaled} --- closest to Raut's widefield implementation and preserves high-amplitude neuron influence;
+  \item \textbf{recording-standardized} --- one robust scale per neuron, fixed for all windows, to limit dominance by a small set of high-amplitude ROIs.
+\end{enumerate}
+
+An uncentred fit will isolate the near-constant/DC component; a within-window mean-centred fit is a sensitivity analysis only. Population mean, variance, active fraction, and sparsity are always reported outside the DMD model so that centering cannot hide tonic state changes. In predictive validation, any cross-session feature scaling is learned inside the training fold. The prescribed within-recording acquisition normalization is repeated unchanged for every label permutation.
+
+\subsection{Temporal representation arms}
+
+\begin{longtable}{@{}P{0.20\textwidth}P{0.30\textwidth}P{0.22\textwidth}P{0.20\textwidth}@{}}
+\toprule
+Arm & Construction & Purpose & Constraint\\
+\midrule
+\endfirsthead
+\toprule
+Arm & Construction & Purpose & Constraint\\
+\midrule
+\endhead
+Primary & Native 7.65-Hz \texttt{spike\_smoothed} & Matches the project's current event-rate proxy; retains 300 snapshots/window & Strong serial correlation from 1.96-s smoothing must enter effective-sample and uncertainty calculations\\
+Raut-timescale & Per-neuron \texttt{spike\_deconv} counts in 9-frame bins (1.176 s), divided by bin duration & Tests the proposed 1.2-s mean-rate timescale without destroying neuron identity & About 33 independent bins in a 39-s window; rank must be small; no upsampling\\
+Decimated & Anti-aliased \texttt{spike\_smoothed} at approximately 1.53 Hz (factor 5) & Checks whether native-frame eigenvalues merely reflect oversampling/smoothing & Preserve physical window duration; document filter and edge handling\\
+Observation model & $\Delta F/F$ and unsmoothed \texttt{spike\_deconv} where stable & Tests deconvolution/smoothing dependence & Interpretation must account for calcium decay and noise \citep{wei2020,koh2023}\\
+\bottomrule
+\end{longtable}
+
+No additional 0.01--0.2-Hz filter will be copied from Raut. That band addressed ten-minute awake widefield recordings and is incompatible with primary 39-s window resolution. Any band-limited arm will use zero-phase filtering only inside continuous acquisition segments, discard filter transients, apply the identical operation to simulations/surrogates, and couple the lower cutoff to the window length.
+
+\subsection{Continuity rules}
+
+All snapshot pairs and filters must remain within one continuous acquisition segment. Pure-state windows must also remain within one uninterrupted occurrence of a single state. Specifically:
+
+\begin{itemize}
+  \item never slice concatenated \texttt{used\_frame} indices as if they were contiguous;
+  \item never create $x(t)\rightarrow x(t+1)$ across \texttt{boundary\_ind};
+  \item never smooth/filter a vector formed by concatenating non-contiguous state bouts; new filtering is performed continuously within acquisition segments, not independently by state;
+  \item store the original start/end frame and bout identifier for every window; and
+  \item assert zero illegal snapshot pairs in automated checks before fitting any operator.
+\end{itemize}
+
+The stored \texttt{spike\_smoothed} trace was constructed on the continuous recording and can therefore contain finite-kernel support from the opposite state near a label transition. The primary manifest flags this support; a sensitivity analysis erodes each pure-state run by half the 15-frame kernel length before window placement. Acquisition-break contamination is never allowed.
+
+\section{Windowing and resolvable timescales}
+
+\subsection{Pure-state analysis}
+
+Primary windows have length $W=300$ frames and hop $H=38$ frames. A window is accepted only if all 300 frames have the same primary state, lie within one acquisition segment, and satisfy the project's persistence definition. Each accepted window stores state, occupancy, bout, mouse, session, clock time, mean activity, active fraction, and distance to nearest annotated transition.
+
+The nominal Fourier resolution is $1/39.2=0.0255$ Hz, but a one-cycle estimate is not robust. Primary physiological summaries require at least three cycles, giving
+\begin{equation}
+  f_{\min}^{(3)}=\frac{3}{W/f_s}=0.0765\;\mathrm{Hz}.
+\end{equation}
+Modes below this threshold may contribute to prediction or the near-DC subspace, but their individual frequency will not be interpreted. The upper interpretable frequency will be the smaller of the anti-alias/Nyquist bound and the measured $-3$-dB bandwidth of the stored smoothing kernel; 0.5 Hz is a conservative ceiling if the exact kernel transfer function cannot be reconstructed.
+
+\subsection{Multiscale sensitivity}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}lrrYY@{}}
+\toprule
+Frames & Seconds & Three-cycle floor & Planned role & Eligibility\\
+\midrule
+150 & 19.6 & 0.153 Hz & transition-localization sensitivity & all bouts $\geq150$ frames\\
+300 & 39.2 & 0.0765 Hz & primary & all primary paired mice\\
+600 & 78.4 & 0.0383 Hz & slower-mode sensitivity & eligible bouts only\\
+1,500 & 196.1 & 0.0153 Hz & link to original network window/infraslow arm & long bouts only\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Results from different window lengths answer different frequency questions and will not be pooled as repeated estimates. Longer-window sensitivity analyses are subject to selection because only long stable bouts qualify; the eligible mouse/session set will be shown for every result.
+
+\subsection{Transition-centred analysis}
+
+Transitions are a separate analysis. Windows may have mixed state occupancy but still cannot cross acquisition breaks. For each annotated transition, compute centred and causal operator summaries on a fixed grid, retain the occupancy vector, and align time zero to the label transition. The best possible localization is limited by the approximately four-second scoring epoch and by window mixing; a centred 39-s estimator should not be claimed to locate a change more precisely than approximately $W/2$ without simulation evidence.
+
+Matched pseudo-transitions will be sampled from the same session, state, bout-duration distribution, and distance from acquisition boundaries. A global tracker may connect modes across a true transition, but no smoothness/acceleration penalty will be imposed across that boundary in the confirmatory analysis.
+
+\section{Window-specific DMD specification}
+
+\subsection{Core equations}
+
+For a window with $m$ snapshots, form
+\begin{equation}
+  X=[x_1,\ldots,x_{m-1}],\qquad
+  Y=[x_2,\ldots,x_m],qquad Y\approx AX.
+\end{equation}
+With the rank-$r$ SVD $X\approx U_r\Sigma_rV_r\Hh$, define
+\begin{align}
+  \widetilde A &= U_r\Hh YV_r\Sigma_r^{-1},\\
+  \widetilde A W &= W\Lambda,\\
+  \Phi &= YV_r\Sigma_r^{-1}W.
+\end{align}
+The columns $\phi_j$ of $\Phi$ are exact DMD modes and the discrete eigenvalues are $z_j=\Lambda_{jj}$. With physical lag $\Delta t$,
+\begin{equation}
+  \omega_j=\frac{\Log z_j}{\Delta t}=\sigma_j+i2\pi f_j,
+\end{equation}
+where $\sigma_j$ is growth/decay rate and $f_j$ is frequency. The principal complex-log branch is admissible only below Nyquist; branch and frequency-continuity checks are mandatory.
+
+Given amplitudes $b$, reconstruction is
+\begin{equation}
+  \widehat x(t)=\sum_{j=1}^{r} b_j\phi_j e^{\omega_j t}.
+\end{equation}
+Amplitude/energy depends on the initial condition and will be reported separately from operator geometry.
+
+\subsection{Estimator benchmark and selection}
+
+Four estimators will be compared on state-masked development data and simulations:
+
+\begin{enumerate}
+  \item rank-2 randomized exact DMD matching Raut's implementation (benchmark);
+  \item total-least-squares or forward--backward DMD (noise-bias correction);
+  \item subspace DMD (stochastic-observation candidate); and
+  \item BOP-DMD after a common randomized spatial projection (uncertainty-aware candidate).
+\end{enumerate}
+
+The method is selected once per temporal/preprocessing configuration by an ordered rule: valid/stable fits; held-out contiguous one- and multi-step forecast skill; bootstrap spectral-projector stability; then computational feasibility. Brain-state separability is not a selection criterion. If two candidates are practically tied, choose the simpler estimator and retain the other as sensitivity. The chosen estimator and thresholds are frozen before unmasking state comparisons.
+
+\subsection{Rank and lag}
+
+Candidate ranks are $r\in\{2,4,6,8,12\}$, additionally constrained to at most one mode per ten effective temporal samples after accounting for serial correlation. A single $r$ is fixed across all windows in a configuration. This prevents windowwise energy thresholds from turning noise/rate changes into artificial rank births. Rank selection combines:
+
+\begin{itemize}
+  \item blocked held-out forecast error;
+  \item reconstruction error on held-out contiguous samples;
+  \item bootstrap principal-angle/eigenvalue stability;
+  \item eigenvalue conditioning and residual; and
+  \item saturation of performance relative to rank.
+\end{itemize}
+
+The primary native-frame lag is one frame (0.1307 s) for direct DMD comparability, with four- and eight-frame lags (0.523 and 1.046 s) and factor-5 decimation as sensitivity analyses. A lag is never chosen by state accuracy. If lag-one operators are indistinguishable from identity and provide no forecast gain beyond persistence, the decimated/longer-lag configuration becomes primary through a documented pre-unmasking amendment.
+
+\subsection{Mode grouping and quality filters}
+
+Real data yield complex conjugate mode pairs. For Grassmann trajectories and lineage tracking, each non-real pair is represented as a real two-dimensional invariant subspace
+\begin{equation}
+  \mathcal S_j=\operatorname{span}\{\Re\phi_j,\Im\phi_j\},
+\end{equation}
+and summarized by its positive frequency. Real near-DC modes remain one-dimensional. Closely spaced or repeatedly swapping eigenvalues are grouped into a joint Schur/invariant subspace. In the \emph{exact} SGOT calculation, however, the two distinct conjugate generator eigenvalues remain two atoms; collapsing them into one pair atom is reported only as a conjugate-invariant adaptation.
+
+An individual mode is eligible for biological tracking only if it passes all preregistered filters: finite eigenvalue; frequency below the admissible band; bounded residual; acceptable eigenvector/projector condition number; separation or justified grouping; and bootstrap reproducibility. Positive-growth modes are not automatically discarded, because local finite-window fits may be transient, but their forecast stability and physical interpretation are flagged. Near-zero eigenvalues and branch-ambiguous modes are excluded from generator comparisons.
+
+\section{Three complementary tracking levels}
+
+\subsection{Level A: dominant invariant-subspace trajectory}
+
+Let $Q_w\in\C^{N\times q}$ be an orthonormal basis for a fixed number $q$ of the most stable/relevant invariant directions in window $w$, lifted back to the original neuron space. Principal angles satisfy
+\begin{equation}
+  \cos\theta_a=\sigma_a(Q_w\Hh Q_v).
+\end{equation}
+Primary distances are
+\begin{align}
+ d_{\mathrm{geo}}(w,v)&=\left(\sum_a\theta_a^2\right)^{1/2},\\
+ d_{\mathrm{chord}}(w,v)&=\left(\sum_a\sin^2\theta_a\right)^{1/2}
+ =\frac{\|Q_wQ_w\Hh-Q_vQ_v\Hh\|_F}{\sqrt2}.
+\end{align}
+The trajectory yields step size, speed $d/H$, acceleration, within-state dispersion, and distance to a state medoid. This is the most stable geometry and remains reportable even if individual lineages fail validation.
+
+\subsection{Level B: exact SGOT operator comparison}
+
+For a diagonalizable window operator, construct biorthogonal right/left modes satisfying $\psi_j\Hh\phi_k=\delta_{jk}$ and spectral projectors
+\begin{equation}
+  P_j=\phi_j\psi_j\Hh.
+\end{equation}
+Repeated/conjugate atoms use the corresponding joint projector subspace. The window is represented by
+\begin{equation}
+  \mu_w=\sum_j a_{wj}\delta_{(\omega_{wj},\mathcal V_{wj})},
+\end{equation}
+with multiplicity masses $a_{wj}$ in the exact Germain definition \citep{germain2026}. Repeated eigenvalues use their joint projector subspace, while distinct complex conjugates remain separate atoms. The ground cost is
+\begin{equation}
+  c_{jq}=\eta\,d_\omega(\omega_{wj},\omega_{vq})+(1-\eta)d_G(\mathcal V_{wj},\mathcal V_{vq}),
+\end{equation}
+and the primary operator distance is the order-2 balanced Wasserstein cost. Decay and angular-frequency coordinates are robustly scaled using training data so that inverse-time units do not arbitrarily dominate dimensionless projector distance. Candidate $\eta$ values are $\{0.01,0.1,0.27,0.5,0.9\}$; 0.27 is Germain's sampling-rate heuristic at 7.65 Hz, not a guaranteed optimum.
+
+The exact metric is used only when both left and right information and a common observable space are valid. A right-mode-only or energy-weighted variant is explicitly labelled \emph{SGOT-inspired}. Multiplicity mass is primary; reconstruction-energy mass is descriptive sensitivity.
+
+\subsection{Level C: persistent mode/invariant-subspace lineages}
+
+SGOT's adjacent transport plan seeds candidate edges, but a session-wide graph supplies persistence. For atom $j$ in window $w$ and atom $q$ in $w+1$ define
+\begin{equation}
+  C_{jq}=\alpha_\omega d_\omega^2+\alpha_Gd_G^2+alpha_E\left|\log\frac{E_{wj}+\epsilon}{E_{w+1,q}+\epsilon}\right|+mathcal B_{jq},
+\end{equation}
+where $E$ is modal reconstruction energy and $\mathcal B$ applies hard spectral/conditioning gates. Robust scales and weights are learned without labels. The graph includes dummy birth/death nodes, optional one-window gaps, and a curvature penalty over three windows. Global min-cost flow is preferred to independent Hungarian assignments because the latter switch identities at eigenvalue crossings. Unbalanced OT is a declared alternative \citep{chizat2018}.
+
+Track confidence includes bootstrap match probability, assignment-cost margin, eigenvalue uncertainty, and identity-switch rate in simulation. Complex phase is aligned only after matching,
+\begin{equation}
+  \phi'\leftarrow e^{-i\arg(\phi\Hh\phi')}\phi',
+\end{equation}
+with consistent transformation of the left mode. Grouped real subspaces use orthogonal Procrustes alignment. Raw signs/phases are never treated as biology.
+
+\subsection{Within- versus across-animal geometry}
+
+Raw neuronal projectors in different sessions live in different ambient spaces. They cannot be inserted into a common Grassmann distance. The primary cross-animal outputs are therefore coordinate-invariant scalars and within-session contrasts. Optional common-space arms are:
+
+\begin{itemize}
+  \item Gaussian/RBF spatial pooling onto a normalized two-dimensional FOV grid;
+  \item a fixed spatial basis learned only on training animals; or
+  \item dynamical similarity analysis/Procrustes comparison in a common latent dimension \citep{ostrow2023}.
+\end{itemize}
+
+Because atlas labels are not available in the current processed files and FOV orientation/alignment uncertainty remains, cross-mouse spatial-mode claims are exploratory until registration is independently validated.
+
+\section{Features and primary estimands}
+
+\subsection{Window-level feature families}
+
+\begin{longtable}{@{}P{0.19\textwidth}P{0.47\textwidth}P{0.26\textwidth}@{}}
+\toprule
+Family & Features & Interpretation / guardrail\\
+\midrule
+\endfirsthead
+\toprule
+Family & Features & Interpretation / guardrail\\
+\midrule
+\endhead
+Spectrum & frequency and decay distributions; near-neutral mass; unstable mass; spectral entropy; effective mode count & Interpret frequencies only inside window/kernel-supported band; report complex-log branch and condition\\
+Amplitude/model & least-squares modal amplitudes; reconstruction energy; held-out one-/multi-step error & Initial-condition dependent; never use as SGOT multiplicity mass without relabelling\\
+Spatial mode & participation ratio; spatial concentration; coordinate-based Moran's $I$; stable phase gradient/propagation & Phase analyses require conjugate pairing and global phase alignment; no atlas-region claims without registration\\
+Subspace/operator & principal-angle distance; SGOT step size; distance to state medoid; within-state dispersion & Primary within session; common-space requirement across sessions\\
+Lineage & lifetime; frequency/decay drift; subspace velocity; birth/death and fragmentation rate; assignment entropy & Report only if mode-tracking validation gate passes\\
+Nuisance/baseline & mean event rate; active fraction; variance; sparsity; global PC1--3 power; autocorrelation time; covariance/PCA subspace & Tests whether DMD adds beyond tonic/global/static structure\\
+\bottomrule
+\end{longtable}
+
+\subsection{Primary operator-separation estimand}
+
+Within session $s$, use balanced, disjoint windows or bout-balanced resamples to estimate
+\begin{equation}
+  \mathcal C_s=\operatorname{median}D(A,T)
+  -\frac{1}{2}\left[\operatorname{median}D(A,A')+\operatorname{median}D(T,T')\right],
+\end{equation}
+where $D$ is SGOT, $A$ denotes awake windows, and $T$ the paired target state. Positive $\mathcal C_s$ means state separation exceeds within-state spread. Bout-balanced bootstrap intervals accompany each session. The mouse-level sleep value aggregates mouse04's two session values before the cohort summary.
+
+As a complementary restricted-permutation statistic, use a distance-based pseudo-$F$ or energy statistic with state labels permuted only in blocks compatible with the session design. The scalar $\mathcal C_s$ remains the primary interpretable effect.
+
+\subsection{Feature contrasts and commonality}
+
+For each locked scalar feature $g$, compute within-session robust effects
+\begin{equation}
+  \Delta_{sg}=\operatorname{median}(g\mid T)-\operatorname{median}(g\mid A),
+\end{equation}
+plus a robust standardized version using pooled within-state scale. At group level, show every mouse and the median/mean with uncertainty; do not hide heterogeneity in a window-pooled coefficient.
+
+To assess shared reduced-consciousness structure, assemble state-effect vectors $\boldsymbol\Delta_s$ in a prespecified, training-scaled scalar feature basis and compare the cohort-average NREM and anaesthesia directions by cosine similarity. A bootstrap over mice quantifies uncertainty. This is exploratory and cannot eliminate paradigm confounds.
+
+\subsection{Transition estimands}
+
+Primary transition metrics are change from a pretransition baseline in SGOT step size and subspace velocity, peak magnitude, area under the change curve, and time of peak. Compare them with matched pseudo-transitions. Secondary metrics include track birth/death rate and distance to awake/target medoids. Transition precision--recall and latency are calibrated first on simulations because windowing itself creates an expected delay and broadening.
+
+\section{State characterization and prediction}
+
+\subsection{Primary descriptive/inferential analysis}
+
+The primary analysis is estimation-focused. It reports per-session and per-mouse paired effects for H1--H5, together with uncertainty, sensitivity configurations, and null distributions. State medoids are preferred over nonlinear SGOT barycenters. Barycenters and nonlinear embeddings of pairwise distances are visualization-only unless independently stable across bootstraps.
+
+\subsection{Secondary state decoding}
+
+A low-dimensional, prespecified scalar feature vector is evaluated with nested leave-one-mouse-out validation. Mouse04's two days always occupy the same fold. All cross-session scaling, feature selection, rank/lag/estimator choices, regularization, and classifier hyperparameters are learned inside training folds. Overlapping windows never appear on opposite sides of a split.
+
+The primary decoder is regularized logistic regression; a tree ensemble is a nonlinear sensitivity. Predictions are aggregated first within bout and session, then evaluated with balanced accuracy, macro-AUROC where defined, macro-F1, and calibration. A common-grid SGOT distance-to-medoid or kernel classifier is optional only after common-space validation. Random window splits and raw-neuron SGOT classifiers across mice are prohibited.
+
+Permutation nulls repeat the complete training pipeline. Because state order is structured, labels are shuffled at admissible bout/session blocks or circularly shifted within acquisition segments while preserving state-duration structure; individual frames/windows are never permuted independently.
+
+\subsection{Competing dynamical hypotheses}
+
+The locked DMD pipeline will be benchmarked against:
+
+\begin{itemize}
+  \item static whole-state DMD and covariance/PCA-subspace distances;
+  \item mean rate, active fraction, global-PC power, PSD, and autocorrelation baselines;
+  \item multiresolution or non-stationary DMD for multiscale/smooth drift \citep{kutz2016mrdmd,ferre2023}; and
+  \item HMM, recurrent switching LDS, or factorially switching DMD for recurrent metastable regimes \citep{linderman2017,takeishi2018switching,stevner2019,hudson2014}.
+\end{itemize}
+
+The comparison uses held-out prediction, transition recovery, stability, and parsimony. It asks whether dynamics drift smoothly, switch among reusable states, or are adequately explained by static rate/covariance changes.
+
+\section{Validation, controls, and falsification}
+
+\subsection{Synthetic ground truth}
+
+Before biological interpretation, simulate switching low-rank linear systems with known eigenvalues, conjugate invariant subspaces, nonnormality, crossings, smooth drift, and mode births/deaths. Generate event observations, convolve with a calcium kernel matched to the data, add measurement/motion-like noise, run the same OASIS/smoothing or approximation thereof, and sample at 7.65 Hz. Match empirical ranges of neuron count, window length, event sparsity, and signal-to-noise ratio.
+
+Report frequency/decay error, principal-angle error, operator-distance calibration, match precision/recall, identity switches, track fragmentation, birth/death precision/recall, and transition latency. Include null simulations with a stationary operator but changing mean rate and with a fixed operator plus observation-noise/sparsity changes. These distinguish true operator changes from observation changes.
+
+\subsection{Empirical reliability}
+
+\begin{itemize}
+  \item moving-block or residual bootstrap within long homogeneous bouts;
+  \item split-half mode/projector stability where duration permits;
+  \item held-out contiguous one- and multi-step forecasts;
+  \item replicate analysis across signal arms, ranks, lags, windows, and deterministic seeds;
+  \item eigengap, residual, condition-number, and branch diagnostics for every retained atom; and
+  \item comparison of mouse04's two days as repeat-session reliability, not independent mice.
+\end{itemize}
+
+\subsection{Stationary and synchrony-destroying nulls}
+
+Sliding-window trajectories will be compared with at least three nulls:
+
+\begin{enumerate}
+  \item stationary low-rank VAR/state-space surrogates fitted within state, preserving spectrum and calcium autocorrelation;
+  \item per-neuron circular shifts within continuous bouts, preserving approximate marginal rate/autocorrelation while disrupting synchrony; and
+  \item phase-randomized multivariate surrogates with explicitly stated preservation of power and cross-spectrum.
+\end{enumerate}
+
+Nulls must pass through identical preprocessing, windowing, rank selection, quality filters, and tracking. This is required because autocorrelation and finite windows can create apparent dynamics even under stationarity \citep{leonardi2015,hindriks2016}.
+
+\subsection{Rate, sparsity, and dimension controls}
+
+Observed state effects will be challenged by:
+
+\begin{itemize}
+  \item matching/subsampling windows on population mean, active fraction, and sparsity;
+  \item including those quantities as nuisance predictors without conditioning on post-state colliders where avoidable;
+  \item equal-duration and equal-window-count resampling across states;
+  \item repeated equal-$N$ neuron subsampling; and
+  \item population-mean-only, global-PC, covariance, and PSD baselines.
+\end{itemize}
+
+If a DMD effect disappears after rate matching, the correct conclusion is that the operator signature is not separable from the event-rate change in these data, not that the control ``removed'' a valid result.
+
+\subsection{Provisional go/no-go gates}
+
+The numerical thresholds below are provisional but must be frozen before biological state labels are used for method selection.
+
+\begin{gatebox}[Gate 1 --- data geometry]
+Proceed only with zero illegal snapshot/filter pairs across state or acquisition boundaries; a fixed ROI coordinate system within session; complete window provenance; and exact reproduction of the feasibility counts from the locked extractor.
+\end{gatebox}
+
+\begin{gatebox}[Gate 2 --- operator-level reporting]
+An operator configuration is eligible if it has positive held-out forecast skill over persistence in a majority of sessions, stable rank/fit diagnostics, and same-window bootstrap SGOT distances below matched stationary-surrogate between-window distances. If no configuration qualifies, report the failure and restrict conclusions to static rate/covariance baselines.
+\end{gatebox}
+
+\begin{gatebox}[Gate 3 --- individual lineage reporting]
+Report mode lineages only if SNR-matched simulations achieve at least 0.80 correct association and fewer than 0.10 identity switches per eligible transition, and empirical bootstrap match probability is at least 0.80. Otherwise report only dominant-subspace and whole-operator trajectories.
+\end{gatebox}
+
+\begin{gatebox}[Gate 4 --- biological interpretation]
+Call a difference ``dynamical'' only if it exceeds matched stationary nulls, is not wholly explained by rate/global baselines, has consistent sign in most mice, and is qualitatively stable in at least one alternative signal arm and one alternative window/lag configuration. Exact effect sizes and exceptions are reported regardless.
+\end{gatebox}
+
+\section{Statistical analysis and multiplicity}
+
+\subsection{Inferential unit and dependence}
+
+The mouse is the biological replicate. Bout and session are nested repeated observations. Overlapping windows are dense measurements of a trajectory, not replicates. Primary effects are first aggregated within bout/session and then within mouse. Where a hierarchical model uses window summaries, it includes mouse and bout/session effects and an explicit autocorrelation/block structure; it never turns thousands of windows into thousands of degrees of freedom.
+
+Sleep has $n=5$ unique mice and anaesthesia $n=4$. With exact two-sided sign-flip tests, the minimum attainable $p$ values are $2/2^5=0.0625$ and $2/2^4=0.125$, respectively. Conventional $p<0.05$ is therefore impossible for these paired cohort tests without invalidly treating repeated windows or sessions as animals. The primary presentation will emphasize all-mouse effects, robust cohort location, interval estimates, leave-one-mouse-out sensitivity, and the finite permutation resolution. Bayesian hierarchical estimates, if used, will include prior-sensitivity analysis and will not be described as adding replication.
+
+\subsection{Primary outcome families}
+
+Multiplicity is controlled within five prespecified families:
+
+\begin{enumerate}
+  \item operator separation $\mathcal C_s$ and within-state dispersion;
+  \item subspace/SGOT transition change;
+  \item spectral distribution summaries;
+  \item spatial/modal organization summaries; and
+  \item lineage/persistence summaries, conditional on Gate 3.
+\end{enumerate}
+
+Within a family, use a max-statistic restricted permutation where feasible or Benjamini--Hochberg FDR for explicitly labelled secondary features. The primary $\mathcal C_s$ effect is singular and reported with its exact randomization resolution. Window lengths and preprocessing arms are sensitivities, not additional opportunities to select the smallest $p$ value.
+
+\section{Implementation phases and acceptance criteria}
+
+\begin{longtable}{@{}P{0.10\textwidth}P{0.28\textwidth}P{0.35\textwidth}P{0.19\textwidth}@{}}
+\toprule
+Phase & Work & Required artifact & Exit criterion\\
+\midrule
+\endfirsthead
+\toprule
+Phase & Work & Required artifact & Exit criterion\\
+\midrule
+\endhead
+0 & Freeze this specification; create synthetic generators and stationary nulls & Versioned configuration schema; simulation truth tables; boundary tests & Gate 1 tests designed before fit code\\
+1 & Implement continuity-safe window extractor and signal arms & Window manifest with frame, bout, state, mouse, preprocessing provenance & Gate 1 passes; audit counts reproduced\\
+2 & Benchmark DMD estimators, ranks, and lags without using state separability & Forecast/stability report; locked estimator/rank/lag per arm & Gate 2 decision and signed configuration freeze\\
+3 & Implement exact SGOT, right-mode diagnostic, and global tracker & Unit tests on analytic projectors; synthetic recovery report; comparison with Hungarian/Grassmann-only baselines & Gate 3 decision; exact versus adapted metrics clearly separated\\
+4 & Extract all locked window/operator/track features & Immutable feature tables plus QC dashboards; deterministic seeds and software versions & No silent fit failures; exclusions enumerated\\
+5 & Run paired state, transition, null, and decoding analyses & Mouse-level estimand tables; complete sensitivity grid; permutation records & Gate 4 interpretation audit\\
+6 & Reproducible reporting & Methods, figures, machine-readable tables, environment lock, one-command workflow & Independent rerun reproduces manifests and summaries\\
+\bottomrule
+\end{longtable}
+
+\subsection{Computational design constraints}
+
+With up to 10,197 neurons and only 300 temporal samples, all decompositions should use the method of snapshots or randomized SVD and immediately lift retained modes to the neuron space. Raw arrays may remain float32; covariance/SVD, eigenvalue, projector, and distance calculations should use float64/complex128 where conditioning matters. Deterministic seeds, chunked processing, and cached window-level factorizations are required. Parallelization is across sessions/windows, never by mutating one shared result file.
+
+Every artifact will carry session, mouse, original frames, bout, state occupancy, signal arm, centering/scaling, window/hop, lag, rank, estimator, seed, filter, mode-quality flags, and software-version identifiers. Failed windows remain in the manifest with reason codes.
+
+\section{Planned figures and tables}
+
+The final analysis report should contain, in this order:
+
+\begin{enumerate}
+  \item dataset/bout/window availability and exclusion flow;
+  \item simulation and stationary-null calibration, including failure regions;
+  \item estimator/rank/lag forecast and stability benchmark;
+  \item one representative within-session operator trajectory with uncertainty and state annotations;
+  \item all-mouse awake--target operator-separation effects;
+  \item spectral/spatial feature contrasts with rate/global baseline controls;
+  \item transition-aligned SGOT/subspace trajectories versus pseudo-transitions;
+  \item lineage examples only if Gate 3 passes;
+  \item leave-one-mouse-out decoding and permutation null; and
+  \item full sensitivity matrix across signal, window, lag, rank, and estimator.
+\end{enumerate}
+
+Mode maps will show magnitude and globally aligned phase, ROI locations, stability masks, and uncertainty. Every pooled panel will also show the underlying mouse-level points. Nonlinear embeddings (MDS/UMAP) are descriptive and appear only beside quantitative distances and bootstrap stability.
+
+\section{Interpretation rules and known limitations}
+
+\begin{stopbox}[Predeclared prohibited interpretations]
+Do not call \texttt{spike\_smoothed} calibrated firing rate; do not average neurons before DMD; do not interpret sub-three-cycle frequencies; do not equate a right-mode Grassmann distance with exact SGOT; do not infer persistent identity from pairwise assignment alone; do not compare raw neuronal subspaces across mice; do not use overlapping windows as sample size; and do not interpret sleep--anaesthesia agreement as a consciousness mechanism without protocol controls.
+\end{stopbox}
+
+Other limitations are unavoidable. Calcium kinetics and deconvolution may alter eigenvalues and phase. DMD identifies a best-fit linear representation of observables, not synaptic causality. Local operators can be nonnormal or near defective, making individual modes unstable. State labels have finite temporal resolution. Behavioural covariates such as pupil, locomotion, whisking, and respiration are not continuously available here, so arousal/movement cannot be fully separated. The small mouse cohorts bound inferential resolution. Long-window arms select unusually long bouts, while short windows cannot resolve infraslow modes.
+
+These limitations motivate the layered endpoint: whole-operator and invariant-subspace results are primary; individual mode stories are conditional. A null or unstable result is scientifically interpretable as an identifiability bound for this recording duration, observation model, and cohort.
+
+\section{Final locked recommendation}
+
+Proceed in the following order: continuity-safe neuron-by-time event-rate matrices; state-blind estimator/rank/lag validation; 39.2-s primary windows plus explicit multiscale sensitivities; conjugate/invariant-subspace representation; within-session exact SGOT where valid; global birth/death-aware tracking only after simulation recovery; mouse-level paired inference; and incremental-value tests against rate, global, covariance, and switching-model baselines.
+
+The first implementation milestone is not a state figure. It is a validation report demonstrating that the proposed operator and tracker recover known dynamics and remain calibrated under a stationary calcium-like null. Only after those gates pass should state labels be used for the biological comparisons specified above.
+
+\clearpage
+\sloppy
+\bibliographystyle{unsrtnat}
+\bibliography{dmd_tracking_references}
+
+\end{document}

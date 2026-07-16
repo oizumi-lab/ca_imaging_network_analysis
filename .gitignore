@@ -9,6 +9,9 @@ __pycache__/
 # --- Virtual env (in-project poetry .venv) ---
 .venv/
 
+# --- raw_documents (large)
+raw_documents/
+
 # --- Data (large; downloaded separately, see scripts/download_data.py) ---
 data/
 
