@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 import numpy as np
+from matplotlib.figure import Figure
 
 from src.funcnet import visualization as viz
 
@@ -46,6 +47,157 @@ class ViewSelectionTests(unittest.TestCase):
         self.assertEqual(viz.nice_scale_bar(6.0), 5.0)
         self.assertEqual(viz.nice_scale_bar(0.08), 0.05)
         self.assertEqual(viz.nice_scale_bar(0.0), 1.0)
+
+    def test_rastermap_display_order_contains_every_neuron_once(self) -> None:
+        order, n_fitted = viz.rastermap_display_order(
+            n_neurons=7,
+            rastermap_isort=np.array([5, 1, 6, 0, 3]),
+        )
+
+        # Fitted neurons retain the exact Rastermap order. Neurons that could
+        # not be fitted are still visible, appended in original ROI-row order.
+        np.testing.assert_array_equal(order, [5, 1, 6, 0, 3, 2, 4])
+        np.testing.assert_array_equal(np.sort(order), np.arange(7))
+        self.assertEqual(np.unique(order).size, 7)
+        self.assertEqual(n_fitted, 5)
+
+    def test_rastermap_display_order_validates_fitted_roi_ids(self) -> None:
+        with self.assertRaises(ValueError):
+            viz.rastermap_display_order(4, np.array([2, 2, 0]))
+        with self.assertRaises(IndexError):
+            viz.rastermap_display_order(4, np.array([0, 4]))
+        with self.assertRaises(ValueError):
+            viz.rastermap_display_order(4, np.array([[0, 1]]))
+
+
+class CorticalRegionDisplayTests(unittest.TestCase):
+    def test_atlas_mapping_separates_other_from_unknown(self) -> None:
+        atlas = np.array(
+            ["MOs2/3", "RSPd", "VISp2/3", "root", "", None, "unknown"],
+            dtype=object,
+        )
+
+        np.testing.assert_array_equal(
+            viz.cortical_region_labels(atlas),
+            ["MOs", "RSPd", "Other", "Other", "Unknown", "Unknown", "Unknown"],
+        )
+        self.assertNotEqual(
+            viz.CORTICAL_REGION_COLORS["Other"],
+            viz.CORTICAL_REGION_COLORS["Unknown"],
+        )
+
+    def test_region_legend_uses_shared_order_and_only_present_categories(self) -> None:
+        handles = viz.cortical_region_legend_handles(
+            np.array(["Unknown", "SSp-tr", "Other", "SSp-tr"], dtype=object)
+        )
+
+        self.assertEqual(
+            [handle.get_label() for handle in handles],
+            ["SSp-tr", "Other", "Unknown"],
+        )
+        self.assertEqual(
+            [handle.get_markerfacecolor() for handle in handles],
+            [
+                viz.CORTICAL_REGION_COLORS["SSp-tr"],
+                viz.CORTICAL_REGION_COLORS["Other"],
+                viz.CORTICAL_REGION_COLORS["Unknown"],
+            ],
+        )
+
+    def test_brain_region_mapping_keeps_exact_atlas_acronyms(self) -> None:
+        atlas = np.array(
+            ["VISp2/3", "SSp-m2/3", "root", "LP2/3", "", None],
+            dtype=object,
+        )
+
+        np.testing.assert_array_equal(
+            viz.brain_region_labels(atlas),
+            ["VISp", "SSp-m", "root", "Other", "Unknown", "Unknown"],
+        )
+        self.assertNotEqual(
+            viz.BRAIN_REGION_COLORS["VISp"],
+            viz.BRAIN_REGION_COLORS["SSp-m"],
+        )
+
+    def test_brain_region_order_preserves_activity_rank_within_regions(self) -> None:
+        atlas = np.array(
+            ["VISp2/3", "MOs2/3", "VISa2/3", "MOs2/3", "SSp-m2/3"],
+            dtype=object,
+        )
+        activity_order = np.array([3, 0, 4, 2, 1])
+
+        order = viz.brain_region_order(atlas, activity_order)
+
+        # MOs comes first in the shared anatomical order, but its two neurons
+        # retain their relative positions from the activity-ranked permutation.
+        np.testing.assert_array_equal(order, [3, 1, 4, 2, 0])
+        np.testing.assert_array_equal(np.sort(order), np.arange(atlas.size))
+
+    def test_brain_region_order_requires_a_complete_roi_permutation(self) -> None:
+        atlas = np.array(["MOs2/3", "MOp2/3", "RSPd2/3"], dtype=object)
+
+        with self.assertRaises(ValueError):
+            viz.brain_region_order(atlas, np.array([0, 0, 2]))
+        with self.assertRaises(ValueError):
+            viz.brain_region_order(atlas, np.array([0, 1]))
+        with self.assertRaises(TypeError):
+            viz.brain_region_order(atlas, np.array([0.0, 1.0, 2.0]))
+
+    def test_region_strip_has_one_cell_per_roi_in_supplied_order(self) -> None:
+        atlas = np.array(["MOs2/3", "", "VISp2/3", "RSPd2/3"], dtype=object)
+        roi_order = np.array([3, 0, 2, 1])
+        ax = Figure().subplots()
+
+        image, handles = viz.plot_cortical_region_strip(
+            ax,
+            atlas,
+            roi_order,
+            n_fitted=3,
+        )
+
+        color_index = {
+            region: index for index, region in enumerate(viz.CORTICAL_REGION_COLORS)
+        }
+        np.testing.assert_array_equal(
+            np.asarray(image.get_array()).ravel(),
+            [
+                color_index["RSPd"],
+                color_index["MOs"],
+                color_index["Other"],
+                color_index["Unknown"],
+            ],
+        )
+        self.assertEqual(np.asarray(image.get_array()).shape, (4, 1))
+        self.assertEqual(
+            [handle.get_label() for handle in handles],
+            ["MOs", "RSPd", "Other", "Unknown"],
+        )
+        self.assertEqual(len(ax.lines), 1)
+        np.testing.assert_allclose(ax.lines[0].get_ydata(), [2.5, 2.5])
+        self.assertEqual(tuple(ax.get_ylim()), (4.0, 0.0))
+
+    def test_region_strip_accepts_an_explicit_unique_roi_subset(self) -> None:
+        atlas = np.array(["MOs2/3", "MOp2/3", "RSPd2/3"], dtype=object)
+        ax = Figure().subplots()
+
+        image, _ = viz.plot_cortical_region_strip(ax, atlas, np.array([2, 0]))
+
+        self.assertEqual(np.asarray(image.get_array()).shape, (2, 1))
+        self.assertEqual(tuple(ax.get_ylim()), (2.0, 0.0))
+
+    def test_region_strip_rejects_invalid_roi_subsets(self) -> None:
+        atlas = np.array(["MOs2/3", "MOp2/3", "RSPd2/3"], dtype=object)
+        ax = Figure().subplots()
+
+        with self.assertRaises(ValueError):
+            viz.plot_cortical_region_strip(ax, atlas, np.array([0, 0, 2]))
+        with self.assertRaises(ValueError):
+            viz.plot_cortical_region_strip(
+                ax,
+                atlas,
+                np.array([0, 1, 2]),
+                n_fitted=4,
+            )
 
 
 class BinnedDisplayPreparationTests(unittest.TestCase):
@@ -110,6 +262,118 @@ class BinnedDisplayPreparationTests(unittest.TestCase):
         np.testing.assert_allclose(panels[1]["values"], [[-1], [1]])
         np.testing.assert_allclose(panels[2]["values"], [[-4], [4]])
         self.assertEqual(color_limit, 4.0)
+
+    def test_region_spike_plot_maps_original_rois_to_grouped_rows(self) -> None:
+        # The stored raster is activity-ranked as ROI [2, 0, 3, 1]. Region
+        # grouping produces ROI [3, 1, 2, 0], retaining rank within MOs.
+        view = {
+            "n_neurons": 4,
+            "raster": np.array(
+                [
+                    [1, 0],  # ROI 2
+                    [0, 1],  # ROI 0
+                    [1, 1],  # ROI 3
+                    [0, 0],  # ROI 1
+                ],
+                dtype=np.uint8,
+            ),
+            "neuron_order": np.array([2, 0, 3, 1]),
+            "brain_regions": np.array(["VISp", "MOs", "VISa", "MOs"]),
+            "brain_region_order": np.array([3, 1, 2, 0]),
+            "bin_centers_min": np.array([0.005, 0.015]),
+            "time_limits_min": (0.0, 2 / 60),
+            "state": np.zeros(2),
+            "codes": {0.0: "awake"},
+            "fs": 1.0,
+            "bin_frames": 1,
+            "boundary_minutes": [],
+        }
+
+        ax = Figure().subplots()
+        viz.plot_brain_region_spike_raster(ax, view)
+
+        offsets = np.asarray(ax.collections[0].get_offsets())
+        np.testing.assert_allclose(
+            offsets,
+            [[0.005, 0], [0.015, 0], [0.005, 2], [0.015, 3]],
+        )
+        self.assertEqual(ax.get_ylabel(), "all neurons\n(grouped by atlas region)")
+        self.assertEqual(tuple(ax.get_ylim()), (4.0, 0.0))
+        self.assertEqual(len(ax.lines), 2)
+        np.testing.assert_allclose(
+            [line.get_ydata()[0] for line in ax.lines],
+            [1.5, 2.5],
+        )
+
+    def test_rastermap_spike_plot_uses_original_roi_ids_to_reorder_rows(self) -> None:
+        # The stored compact raster is activity-ranked as ROI [2, 0, 3, 1].
+        # Rastermap instead orders fitted ROIs [1, 3, 0], then appends ROI 2.
+        view = {
+            "n_neurons": 4,
+            "raster": np.array(
+                [
+                    [1, 0],  # ROI 2
+                    [0, 1],  # ROI 0
+                    [1, 1],  # ROI 3
+                    [0, 0],  # ROI 1
+                ],
+                dtype=np.uint8,
+            ),
+            "neuron_order": np.array([2, 0, 3, 1]),
+            "rastermap_isort": np.array([1, 3, 0]),
+            "rastermap_valid_rows": np.array([0, 1, 3]),
+            "bin_centers_min": np.array([0.005, 0.015]),
+            "time_limits_min": (0.0, 2 / 60),
+            "state": np.zeros(2),
+            "codes": {0.0: "awake"},
+            "fs": 1.0,
+            "bin_frames": 1,
+            "boundary_minutes": [],
+        }
+
+        ax = Figure().subplots()
+        viz.plot_rastermap_spike_raster(ax, view)
+
+        # Event rows after reordering are ROI 3 -> row 1, ROI 0 -> row 2,
+        # and appended ROI 2 -> row 3. ROI 1 has no events but retains row 0.
+        offsets = np.asarray(ax.collections[0].get_offsets())
+        np.testing.assert_allclose(
+            offsets,
+            [[0.005, 1], [0.015, 1], [0.015, 2], [0.005, 3]],
+        )
+        self.assertEqual(ax.get_ylabel(), "all neurons\n(Rastermap order)")
+        self.assertEqual(tuple(ax.get_ylim()), (4.0, 0.0))
+
+    def test_active_rastermap_spike_plot_does_not_append_inactive_rows(self) -> None:
+        view = {
+            "n_neurons": 4,
+            "raster": np.array(
+                [[1, 0], [0, 1], [1, 1], [0, 0]],
+                dtype=np.uint8,
+            ),
+            "neuron_order": np.array([2, 0, 3, 1]),
+            "rastermap_isort": np.array([1, 3, 0]),
+            "rastermap_valid_rows": np.array([0, 1, 3]),
+            "rastermap_display_selected_only": True,
+            "bin_centers_min": np.array([0.005, 0.015]),
+            "time_limits_min": (0.0, 2 / 60),
+            "state": np.zeros(2),
+            "codes": {0.0: "awake"},
+            "fs": 1.0,
+            "bin_frames": 1,
+            "boundary_minutes": [],
+        }
+
+        ax = Figure().subplots()
+        viz.plot_rastermap_spike_raster(ax, view)
+
+        offsets = np.asarray(ax.collections[0].get_offsets())
+        np.testing.assert_allclose(offsets, [[0.005, 1], [0.015, 1], [0.015, 2]])
+        self.assertEqual(
+            ax.get_ylabel(),
+            "active selected neurons\n(Rastermap order)",
+        )
+        self.assertEqual(tuple(ax.get_ylim()), (3.0, 0.0))
 
 
 if __name__ == "__main__":

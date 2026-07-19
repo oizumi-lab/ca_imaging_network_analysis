@@ -14,10 +14,11 @@ lets future tutorials reuse the plots without importing an executable tutorial.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 import numpy as np
 from matplotlib.colors import ListedColormap
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.transforms import blended_transform_factory
 
@@ -52,6 +53,330 @@ DEFAULT_SESSION_TITLES = {
     "sleep": "Sleep recording: wakefulness and sleep stages",
     "ane": "Anesthesia recording: awake and isoflurane anesthesia",
 }
+
+# Compact cortical-area categories used by the spatial inspection map,
+# brain-region activity raster, and row-aligned Rastermap diagnostics. ``Other``
+# means that the source contains a valid Allen-atlas acronym outside the nine
+# prominently displayed regions;
+# ``Unknown`` is reserved for a genuinely missing/unassigned source label.  The
+# distinction prevents missing metadata from silently becoming an anatomical
+# assignment.  Dictionary insertion order is also the stable legend order.
+CORTICAL_REGION_COLORS = {
+    "MOs": "#8d1b23",
+    "MOp": "#d24b45",
+    "SSp-ll": "#c8592b",
+    "SSp-ul": "#e4b345",
+    "SSp-un": "#78e25e",
+    "SSp-bfd": "#68b9e8",
+    "SSp-tr": "#3070b7",
+    "RSPagl": "#4949dd",
+    "RSPd": "#722f87",
+    "Other": "#a0a0a0",
+    "Unknown": "#252525",
+}
+
+# Exact atlas regions present in the activity dataset. Unlike the compact
+# cortical map above, this palette keeps the visual and minor somatosensory
+# acronyms separate so a brain-region-grouped raster has one block per supplied
+# anatomical label. Dictionary insertion order is the stable display order.
+BRAIN_REGION_COLORS = {
+    "MOs": "#8d1b23",
+    "MOp": "#d24b45",
+    "SSp-ll": "#c8592b",
+    "SSp-ul": "#e4b345",
+    "SSp-un": "#78e25e",
+    "SSp-bfd": "#68b9e8",
+    "SSp-tr": "#3070b7",
+    "SSp-m": "#2ca25f",
+    "SSp-n": "#99d8c9",
+    "RSPagl": "#4949dd",
+    "RSPd": "#722f87",
+    "VISa": "#e377c2",
+    "VISam": "#f7b6d2",
+    "VISp": "#8c564b",
+    "VISpm": "#c49c94",
+    "VISrl": "#bcbd22",
+    "root": "#a0a0a0",
+    "Other": "#d0d0d0",
+    "Unknown": "#252525",
+}
+
+
+def display_cortical_region(atlas_label: object) -> str:
+    """Map one exact atlas label to a compact display category.
+
+    The recordings target layer 2/3, so a terminal ``2/3`` suffix is removed.
+    Valid but less common atlas acronyms are grouped into ``Other``.  Empty and
+    conventional missing-value strings remain separately visible as
+    ``Unknown`` rather than being assigned to an anatomical catch-all.
+    """
+    if atlas_label is None:
+        return "Unknown"
+    if isinstance(atlas_label, bytes):
+        atlas_label = atlas_label.decode("utf-8", errors="replace")
+    text = str(atlas_label).strip()
+    if text.casefold() in {"", "nan", "none", "unknown", "unassigned", "na", "n/a"}:
+        return "Unknown"
+    area = text.removesuffix("2/3")
+    if area in CORTICAL_REGION_COLORS and area not in {"Other", "Unknown"}:
+        return area
+    return "Other"
+
+
+def cortical_region_labels(atlas_labels: Sequence[object] | np.ndarray) -> np.ndarray:
+    """Return one compact cortical-region category per original ROI row."""
+    atlas = np.asarray(atlas_labels, dtype=object)
+    if atlas.ndim != 1:
+        raise ValueError("atlas_labels must be a one-dimensional ROI-aligned array")
+    if atlas.size == 0:
+        raise ValueError("atlas_labels must contain at least one ROI label")
+    return np.asarray([display_cortical_region(label) for label in atlas], dtype=object)
+
+
+def display_brain_region(atlas_label: object) -> str:
+    """Return one exact layer-collapsed atlas region for the activity raster."""
+    if atlas_label is None:
+        return "Unknown"
+    if isinstance(atlas_label, bytes):
+        atlas_label = atlas_label.decode("utf-8", errors="replace")
+    text = str(atlas_label).strip()
+    if text.casefold() in {"", "nan", "none", "unknown", "unassigned", "na", "n/a"}:
+        return "Unknown"
+    region = text.removesuffix("2/3")
+    if region in BRAIN_REGION_COLORS and region not in {"Other", "Unknown"}:
+        return region
+    return "Other"
+
+
+def brain_region_labels(atlas_labels: Sequence[object] | np.ndarray) -> np.ndarray:
+    """Return one exact display atlas region per original ROI row."""
+    atlas = np.asarray(atlas_labels, dtype=object)
+    if atlas.ndim != 1:
+        raise ValueError("atlas_labels must be a one-dimensional ROI-aligned array")
+    if atlas.size == 0:
+        raise ValueError("atlas_labels must contain at least one ROI label")
+    return np.asarray([display_brain_region(label) for label in atlas], dtype=object)
+
+
+def brain_region_order(
+    atlas_labels: Sequence[object] | np.ndarray,
+    activity_order: np.ndarray,
+) -> np.ndarray:
+    """Group every ROI by exact atlas region, retaining rank within groups.
+
+    ``activity_order`` contains original ROI indices from most to least active.
+    Region groups follow the stable order of :data:`BRAIN_REGION_COLORS`.
+    A stable category sort therefore changes only the between-region ordering;
+    neurons within each region keep their existing whole-session activity rank.
+    """
+    regions = brain_region_labels(atlas_labels)
+    order = np.asarray(activity_order)
+    n_neurons = regions.size
+    if order.ndim != 1 or order.size != n_neurons:
+        raise ValueError("activity_order must contain one ROI index per neuron")
+    if not np.issubdtype(order.dtype, np.integer):
+        raise TypeError("activity_order must contain integer ROI indices")
+    if (
+        np.any(order < 0)
+        or np.any(order >= n_neurons)
+        or np.unique(order).size != n_neurons
+    ):
+        raise ValueError("activity_order must be a permutation of every ROI")
+
+    region_to_index = {
+        region: index for index, region in enumerate(BRAIN_REGION_COLORS)
+    }
+    region_ids = np.asarray(
+        [region_to_index[region] for region in regions[order]],
+        dtype=np.int16,
+    )
+    return order[np.argsort(region_ids, kind="stable")].astype(np.int64, copy=False)
+
+
+def cortical_region_legend_handles(
+    regions: Sequence[str] | np.ndarray | None = None,
+) -> list[Line2D]:
+    """Build stable, point-style legend handles for cortical categories.
+
+    Passing ``regions`` restricts the legend to categories actually present,
+    while retaining the shared anatomical order.  ``None`` requests every
+    category, including the distinct ``Other`` and ``Unknown`` entries.
+    """
+    if regions is None:
+        shown = set(CORTICAL_REGION_COLORS)
+    else:
+        region_array = np.asarray(regions, dtype=object)
+        if region_array.ndim != 1:
+            raise ValueError("regions must be one-dimensional")
+        shown = set(region_array.tolist())
+        unexpected = shown.difference(CORTICAL_REGION_COLORS)
+        if unexpected:
+            raise ValueError(f"Unrecognized cortical categories: {sorted(unexpected)}")
+    return [
+        Line2D(
+            [],
+            [],
+            marker="o",
+            linestyle="none",
+            markersize=5,
+            markerfacecolor=color,
+            markeredgewidth=0,
+            label=region,
+        )
+        for region, color in CORTICAL_REGION_COLORS.items()
+        if region in shown
+    ]
+
+
+def brain_region_legend_handles(
+    regions: Sequence[str] | np.ndarray | None = None,
+) -> list[Line2D]:
+    """Build stable legend handles for exact atlas regions in the raster."""
+    if regions is None:
+        shown = set(BRAIN_REGION_COLORS)
+    else:
+        region_array = np.asarray(regions, dtype=object)
+        if region_array.ndim != 1:
+            raise ValueError("regions must be one-dimensional")
+        shown = set(region_array.tolist())
+        unexpected = shown.difference(BRAIN_REGION_COLORS)
+        if unexpected:
+            raise ValueError(f"Unrecognized brain regions: {sorted(unexpected)}")
+    return [
+        Line2D(
+            [],
+            [],
+            marker="o",
+            linestyle="none",
+            markersize=5,
+            markerfacecolor=color,
+            markeredgewidth=0,
+            label=region,
+        )
+        for region, color in BRAIN_REGION_COLORS.items()
+        if region in shown
+    ]
+
+
+def plot_cortical_region_strip(
+    ax,
+    atlas_labels: Sequence[object] | np.ndarray,
+    roi_order: np.ndarray,
+    n_fitted: int | None = None,
+) -> tuple[Any, list[Line2D]]:
+    """Draw one exact cortical-area color cell per neuron in ``roi_order``.
+
+    ``roi_order`` may contain either every original ROI or an explicit selected
+    subset, but every listed ROI must be unique.  If ``n_fitted`` is supplied, a
+    dashed separator marks where appended unfitted rows begin.  The returned
+    handles include only categories present in the strip and can be passed
+    directly to a figure- or axis-level legend.
+    """
+    regions = cortical_region_labels(atlas_labels)
+    order = np.asarray(roi_order)
+    n_recorded_neurons = regions.size
+    if order.ndim != 1 or order.size == 0:
+        raise ValueError("roi_order must be a non-empty one-dimensional array")
+    if not np.issubdtype(order.dtype, np.integer):
+        raise TypeError("roi_order must contain integer ROI indices")
+    if (
+        np.any(order < 0)
+        or np.any(order >= n_recorded_neurons)
+        or np.unique(order).size != order.size
+    ):
+        raise ValueError("roi_order must contain unique valid ROI rows")
+    n_display_neurons = order.size
+    if n_fitted is not None:
+        if isinstance(n_fitted, (bool, np.bool_)) or not isinstance(
+            n_fitted,
+            (int, np.integer),
+        ):
+            raise TypeError("n_fitted must be an integer or None")
+        if not 0 <= n_fitted <= n_display_neurons:
+            raise ValueError("n_fitted must lie between zero and the displayed count")
+
+    ordered_regions = regions[order]
+    region_order = tuple(CORTICAL_REGION_COLORS)
+    region_to_index = {region: index for index, region in enumerate(region_order)}
+    color_ids = np.asarray(
+        [region_to_index[region] for region in ordered_regions],
+        dtype=np.int16,
+    )
+    image = ax.imshow(
+        color_ids[:, np.newaxis],
+        aspect="auto",
+        origin="upper",
+        extent=(0, 1, n_display_neurons - 0.5, -0.5),
+        cmap=ListedColormap([CORTICAL_REGION_COLORS[name] for name in region_order]),
+        vmin=-0.5,
+        vmax=len(region_order) - 0.5,
+        interpolation="nearest",
+        rasterized=True,
+    )
+    ax.set_xlim(0, 1)
+    ax.set_ylim(n_display_neurons, 0)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_title("area", fontsize=8, pad=3)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    if n_fitted is not None and 0 < n_fitted < n_display_neurons:
+        ax.axhline(n_fitted - 0.5, color="tab:red", lw=0.8, ls=(0, (3, 2)))
+
+    handles = cortical_region_legend_handles(ordered_regions)
+    return image, handles
+
+
+def plot_brain_region_strip(
+    ax,
+    atlas_labels: Sequence[object] | np.ndarray,
+    roi_order: np.ndarray,
+) -> tuple[Any, list[Line2D]]:
+    """Draw one exact atlas-region color cell per neuron in ``roi_order``."""
+    regions = brain_region_labels(atlas_labels)
+    order = np.asarray(roi_order)
+    n_recorded_neurons = regions.size
+    if order.ndim != 1 or order.size == 0:
+        raise ValueError("roi_order must be a non-empty one-dimensional array")
+    if not np.issubdtype(order.dtype, np.integer):
+        raise TypeError("roi_order must contain integer ROI indices")
+    if (
+        np.any(order < 0)
+        or np.any(order >= n_recorded_neurons)
+        or np.unique(order).size != order.size
+    ):
+        raise ValueError("roi_order must contain unique valid ROI rows")
+
+    ordered_regions = regions[order]
+    region_names = tuple(BRAIN_REGION_COLORS)
+    region_to_index = {
+        region: index for index, region in enumerate(region_names)
+    }
+    color_ids = np.asarray(
+        [region_to_index[region] for region in ordered_regions],
+        dtype=np.int16,
+    )
+    image = ax.imshow(
+        color_ids[:, np.newaxis],
+        aspect="auto",
+        origin="upper",
+        extent=(0, 1, order.size - 0.5, -0.5),
+        cmap=ListedColormap([BRAIN_REGION_COLORS[name] for name in region_names]),
+        vmin=-0.5,
+        vmax=len(region_names) - 0.5,
+        interpolation="nearest",
+        rasterized=True,
+    )
+    ax.set_xlim(0, 1)
+    ax.set_ylim(order.size, 0)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_title("region", fontsize=8, pad=3)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    handles = brain_region_legend_handles(ordered_regions)
+    return image, handles
 
 
 class DFFHeatmapPanel(TypedDict):
@@ -91,6 +416,18 @@ class ActivityView(TypedDict):
     bin_frames: int
     bin_centers_min: np.ndarray
     neuron_order: np.ndarray
+    brain_regions: np.ndarray
+    brain_region_order: np.ndarray
+    rastermap_X_embedding: NotRequired[np.ndarray | None]
+    rastermap_embedding: NotRequired[np.ndarray | None]
+    rastermap_isort: NotRequired[np.ndarray | None]
+    rastermap_valid_rows: NotRequired[np.ndarray | None]
+    rastermap_runtime_seconds: NotRequired[float | None]
+    rastermap_cached: NotRequired[bool]
+    rastermap_display_selected_only: NotRequired[bool]
+    rastermap_stop_min: NotRequired[float | None]
+    rastermap_parameters: NotRequired[dict[str, int | float | bool | str] | None]
+    rastermap_version: NotRequired[str | None]
     boundary_minutes: list[float]
     acquisition_segments: list[tuple[int, int]]
 
@@ -144,6 +481,47 @@ def select_trace_neurons(n_neurons: int, n_select: int, seed: int) -> np.ndarray
     rng = np.random.default_rng(seed)
     n_select = min(int(n_select), int(n_neurons))
     return np.sort(rng.choice(n_neurons, size=n_select, replace=False))
+
+
+def rastermap_display_order(
+    n_neurons: int,
+    rastermap_isort: np.ndarray,
+) -> tuple[np.ndarray, int]:
+    """Return a complete ROI order headed by Rastermap-sorted neurons.
+
+    Rastermap cannot assign a position to a non-finite or constant activity
+    row because its per-neuron z-score is undefined.  The fitted ROI indices
+    retain their exact Rastermap order; any such unfitted rows are appended in
+    their original ROI-row order so the binary display still shows every
+    recorded neuron exactly once.  The second return value marks the boundary
+    between fitted and appended rows.
+    """
+    if isinstance(n_neurons, (bool, np.bool_)) or not isinstance(
+        n_neurons,
+        (int, np.integer),
+    ):
+        raise TypeError("n_neurons must be an integer")
+    if n_neurons <= 0:
+        raise ValueError("n_neurons must be positive")
+
+    rastermap_isort = np.asarray(rastermap_isort)
+    if rastermap_isort.ndim != 1:
+        raise ValueError("rastermap_isort must be one-dimensional")
+    if rastermap_isort.size == 0:
+        raise ValueError("rastermap_isort must contain at least one fitted ROI")
+    if not np.issubdtype(rastermap_isort.dtype, np.integer):
+        raise TypeError("rastermap_isort must contain integer ROI indices")
+    if np.any(rastermap_isort < 0) or np.any(rastermap_isort >= n_neurons):
+        raise IndexError("rastermap_isort contains an ROI outside the recording")
+    if np.unique(rastermap_isort).size != rastermap_isort.size:
+        raise ValueError("rastermap_isort must not contain duplicate ROI indices")
+
+    fitted_order = rastermap_isort.astype(np.int64, copy=False)
+    is_fitted = np.zeros(int(n_neurons), dtype=bool)
+    is_fitted[fitted_order] = True
+    appended_order = np.flatnonzero(~is_fitted)
+    complete_order = np.concatenate((fitted_order, appended_order))
+    return complete_order, fitted_order.size
 
 
 def binned_spike_raster(
@@ -444,16 +822,30 @@ def plot_stacked_dff(
     ax,
     view: ActivityView,
     session_titles: Mapping[str, str] | None = None,
+    spacing: float | None = None,
+    line_width: float = 0.27,
 ) -> None:
-    """Plot raw, median-centered ΔF/F traces with common vertical spacing."""
+    """Plot raw, median-centered ΔF/F traces with common vertical spacing.
+
+    ``spacing`` can be shared by several figures when comparing different
+    neuron counts. It translates traces vertically but never rescales their
+    amplitudes. ``line_width`` controls rendering only.
+    """
     titles = DEFAULT_SESSION_TITLES if session_titles is None else session_titles
     time_min = np.arange(view["n_frames"]) / view["fs"] / 60
     centered = view["dff"] - np.nanmedian(view["dff"], axis=1, keepdims=True)
-    q01, q99 = np.nanpercentile(centered, (1, 99))
-    robust_range = q99 - q01
-    spacing = (
-        1.15 * robust_range if np.isfinite(robust_range) and robust_range > 0 else 1.0
-    )
+    if spacing is None:
+        q01, q99 = np.nanpercentile(centered, (1, 99))
+        robust_range = q99 - q01
+        spacing = (
+            1.15 * robust_range
+            if np.isfinite(robust_range) and robust_range > 0
+            else 1.0
+        )
+    elif not np.isfinite(spacing) or spacing <= 0:
+        raise ValueError("spacing must be finite and positive")
+    if not np.isfinite(line_width) or line_width <= 0:
+        raise ValueError("line_width must be finite and positive")
     # Negative offsets put the first neuron at the top while positive calcium
     # transients continue to point upward on the page.
     offsets = -np.arange(centered.shape[0]) * spacing
@@ -470,7 +862,7 @@ def plot_stacked_dff(
                 time_min[start:stop],
                 trace[start:stop] + offset,
                 color="0.08",
-                lw=0.27,
+                lw=line_width,
                 rasterized=True,
                 zorder=2,
             )
@@ -642,6 +1034,259 @@ def plot_spike_raster(ax, view: ActivityView) -> None:
     )
 
 
+def plot_brain_region_spike_raster(ax, view: ActivityView) -> None:
+    """Plot every neuron's binary events grouped by exact atlas region.
+
+    The compact raster is stored in activity-ranked order.  This function maps
+    those rows back to original ROI indices, then applies the cortical-region
+    order prepared for the view. Activity rank is retained within each region.
+    """
+    activity_order = np.asarray(view["neuron_order"])
+    region_order = np.asarray(view["brain_region_order"])
+    n_neurons = view["n_neurons"]
+    for name, order in (
+        ("neuron_order", activity_order),
+        ("brain_region_order", region_order),
+    ):
+        if (
+            order.ndim != 1
+            or order.size != n_neurons
+            or not np.issubdtype(order.dtype, np.integer)
+            or np.unique(order).size != n_neurons
+            or np.any(order < 0)
+            or np.any(order >= n_neurons)
+        ):
+            raise ValueError(f"{name} must be a permutation of every recorded ROI")
+
+    activity_row_for_roi = np.empty(n_neurons, dtype=np.int64)
+    activity_row_for_roi[activity_order] = np.arange(n_neurons)
+    region_raster = view["raster"][activity_row_for_roi[region_order]]
+
+    shade_states(ax, view, alpha=0.10)
+    visible_bins = np.flatnonzero(
+        (view["bin_centers_min"] >= view["time_limits_min"][0])
+        & (view["bin_centers_min"] <= view["time_limits_min"][1])
+    )
+    neuron_rows, local_time_bins = np.nonzero(region_raster[:, visible_bins])
+    ax.scatter(
+        view["bin_centers_min"][visible_bins[local_time_bins]],
+        neuron_rows,
+        s=0.15,
+        marker=".",
+        color="0.02",
+        alpha=0.78,
+        linewidths=0,
+        rasterized=True,
+        zorder=2,
+    )
+    ax.set_xlim(*view["time_limits_min"])
+    ax.set_ylim(n_neurons, 0)
+    ax.set_yticks([0, n_neurons - 1])
+    ax.set_yticklabels(["1", f"{n_neurons:,}"])
+    ax.set_ylabel("all neurons\n(grouped by atlas region)")
+    ax.tick_params(axis="x", labelbottom=False)
+    mark_acquisition_boundaries(ax, view)
+
+    regions = brain_region_labels(view["brain_regions"])[region_order]
+    boundaries = np.flatnonzero(regions[1:] != regions[:-1]) + 1
+    for boundary in boundaries:
+        ax.axhline(boundary - 0.5, color="0.55", lw=0.45, zorder=1)
+
+    actual_bin_seconds = view["bin_frames"] / view["fs"]
+    ax.text(
+        0.995,
+        0.015,
+        f"activity-ranked within each region; display bins ≤ {actual_bin_seconds:.2f} s",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=8,
+        bbox={"facecolor": "white", "edgecolor": "0.8", "alpha": 0.85, "pad": 2},
+        zorder=3,
+    )
+
+
+def plot_rastermap_spike_raster(ax, view: ActivityView) -> None:
+    """Plot selected or complete binary events with rows ordered by Rastermap.
+
+    The compact raster in ``view`` is stored in activity-ranked order.  This
+    function maps those rows back to original ROI indices and then applies the
+    all-session ``rastermap_isort`` permutation.  An active-neuron analysis
+    displays only fitted selected rows.  The legacy all-neuron mode appends
+    mathematically unfittable rows below a separator.
+    """
+    rastermap_isort = view["rastermap_isort"]
+    valid_rows = view["rastermap_valid_rows"]
+    if rastermap_isort is None or valid_rows is None:
+        raise ValueError("This activity view does not contain a Rastermap fit")
+
+    selected_only = bool(view.get("rastermap_display_selected_only", False))
+    if selected_only:
+        complete_roi_order = np.asarray(rastermap_isort, dtype=np.int64)
+        n_fitted = complete_roi_order.size
+    else:
+        complete_roi_order, n_fitted = rastermap_display_order(
+            view["n_neurons"],
+            rastermap_isort,
+        )
+    if valid_rows.size != n_fitted or not np.array_equal(
+        np.sort(valid_rows),
+        np.sort(rastermap_isort),
+    ):
+        raise ValueError("Rastermap order and fitted-row metadata are inconsistent")
+
+    activity_order = np.asarray(view["neuron_order"])
+    if (
+        activity_order.ndim != 1
+        or activity_order.size != view["n_neurons"]
+        or not np.issubdtype(activity_order.dtype, np.integer)
+        or np.unique(activity_order).size != view["n_neurons"]
+        or np.any(activity_order < 0)
+        or np.any(activity_order >= view["n_neurons"])
+    ):
+        raise ValueError("neuron_order must be a permutation of every recorded ROI")
+    activity_row_for_roi = np.empty(view["n_neurons"], dtype=np.int64)
+    activity_row_for_roi[activity_order] = np.arange(view["n_neurons"])
+    rastermap_raster = view["raster"][activity_row_for_roi[complete_roi_order]]
+
+    shade_states(ax, view, alpha=0.10)
+    visible_bins = np.flatnonzero(
+        (view["bin_centers_min"] >= view["time_limits_min"][0])
+        & (view["bin_centers_min"] <= view["time_limits_min"][1])
+    )
+    neuron_rows, local_time_bins = np.nonzero(rastermap_raster[:, visible_bins])
+    ax.scatter(
+        view["bin_centers_min"][visible_bins[local_time_bins]],
+        neuron_rows,
+        s=0.15,
+        marker=".",
+        color="0.02",
+        alpha=0.78,
+        linewidths=0,
+        rasterized=True,
+        zorder=2,
+    )
+    ax.set_xlim(*view["time_limits_min"])
+    n_display_neurons = complete_roi_order.size
+    ax.set_ylim(n_display_neurons, 0)
+    ax.set_yticks([0, n_display_neurons - 1])
+    ax.set_yticklabels(["1", f"{n_display_neurons:,}"])
+    ax.set_ylabel(
+        "active selected neurons\n(Rastermap order)"
+        if selected_only
+        else "all neurons\n(Rastermap order)"
+    )
+    ax.tick_params(axis="x", labelbottom=False)
+    mark_acquisition_boundaries(ax, view)
+
+    n_unfitted = view["n_neurons"] - n_fitted
+    if selected_only:
+        order_text = (
+            f"{n_fitted:,}/{view['n_neurons']:,} active selected rows "
+            "Rastermap-sorted"
+        )
+    elif n_unfitted:
+        ax.axhline(n_fitted - 0.5, color="tab:red", lw=0.8, ls=(0, (3, 2)))
+        order_text = (
+            f"first {n_fitted:,} rows Rastermap-sorted; "
+            f"bottom {n_unfitted:,} non-finite/constant rows appended"
+        )
+    else:
+        order_text = f"all {n_fitted:,} rows Rastermap-sorted"
+    actual_bin_seconds = view["bin_frames"] / view["fs"]
+    ax.text(
+        0.995,
+        0.015,
+        f"{order_text}; display bins ≤ {actual_bin_seconds:.2f} s",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=8,
+        bbox={"facecolor": "white", "edgecolor": "0.8", "alpha": 0.85, "pad": 2},
+        zorder=3,
+    )
+
+
+def plot_rastermap_embedding(
+    ax,
+    view: ActivityView,
+    vmin: float = 0.0,
+    vmax: float = 1.5,
+):
+    """Plot Rastermap's normalized superneuron representation.
+
+    Rastermap determines the row order from the explicitly selected neurons in
+    the complete session. Rows shown here average adjacent neurons *after*
+    sorting; they are never a random sample.
+    """
+    values = view["rastermap_X_embedding"]
+    valid_rows = view["rastermap_valid_rows"]
+    parameters = view["rastermap_parameters"]
+    if values is None or valid_rows is None or parameters is None:
+        raise ValueError("This activity view does not contain a Rastermap fit")
+    if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax <= vmin:
+        raise ValueError("Rastermap color limits must satisfy finite vmin < vmax")
+
+    n_superneurons = values.shape[0]
+    image = ax.imshow(
+        values,
+        aspect="auto",
+        origin="upper",
+        extent=(0, view["rastermap_stop_min"], n_superneurons, 0),
+        cmap="gray_r",
+        vmin=vmin,
+        vmax=vmax,
+        interpolation="nearest",
+        rasterized=True,
+    )
+    ax.set_xlim(*view["time_limits_min"])
+    ax.set_ylim(n_superneurons, 0)
+    ax.set_yticks([0, max(0, n_superneurons - 1)])
+    ax.set_yticklabels(["1", f"{n_superneurons:,}"])
+    superneuron_size = int(parameters["superneuron_size"])
+    ax.set_ylabel(
+        "Rastermap superneurons\n" f"(≤{superneuron_size} adjacent neurons each)"
+    )
+    ax.tick_params(axis="x", labelbottom=False)
+    mark_acquisition_boundaries(ax, view)
+
+    n_valid = valid_rows.size
+    selected_only = bool(view.get("rastermap_display_selected_only", False))
+    if selected_only:
+        selection_text = str(parameters.get("selection_label", "active selected"))
+        neuron_text = (
+            f"{n_valid:,}/{view['n_neurons']:,} {selection_text} neurons fitted"
+        )
+    elif n_valid == view["n_neurons"]:
+        neuron_text = f"all {n_valid:,} recorded neurons fitted"
+    else:
+        neuron_text = (
+            f"{n_valid:,}/{view['n_neurons']:,} neurons fitted; "
+            f"{view['n_neurons'] - n_valid:,} non-finite/constant omitted"
+        )
+    lag_seconds = parameters["time_lag_window"] * parameters["time_bin"] / view["fs"]
+    ax.set_title(
+        f"{view['name']} · {neuron_text} · {time_window_label(view)}\n"
+        f"Rastermap {view['rastermap_version']} · "
+        f"clusters={parameters['n_clusters']}, PCs={parameters['n_PCs']}, "
+        f"locality={parameters['locality']:g}, lag={parameters['time_lag_window']} "
+        f"samples ({lag_seconds:.2f} s)"
+    )
+    cache_label = "cached fit" if view["rastermap_cached"] else "new fit"
+    ax.text(
+        0.995,
+        0.015,
+        f"{cache_label}; mean_time={parameters['mean_time']}",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=8,
+        bbox={"facecolor": "white", "edgecolor": "0.8", "alpha": 0.85, "pad": 2},
+        zorder=3,
+    )
+    return image
+
+
 def plot_spatial_modules(
     ax,
     coords: np.ndarray,
@@ -695,6 +1340,7 @@ def plot_spatial_modules(
 
 __all__ = [
     "ActivityView",
+    "CORTICAL_REGION_COLORS",
     "DEFAULT_SESSION_TITLES",
     "DEFAULT_STATE_COLORS",
     "DEFAULT_STATE_LABELS",
@@ -702,14 +1348,28 @@ __all__ = [
     "DFFHeatmapPanel",
     "binned_dff_heatmaps",
     "binned_spike_raster",
+    "cortical_region_labels",
+    "cortical_region_legend_handles",
+    "BRAIN_REGION_COLORS",
+    "brain_region_labels",
+    "brain_region_legend_handles",
+    "brain_region_order",
+    "display_cortical_region",
     "mark_acquisition_boundaries",
     "nice_scale_bar",
     "plot_all_dff_heatmap",
+    "display_brain_region",
+    "plot_cortical_region_strip",
+    "plot_brain_region_spike_raster",
+    "plot_brain_region_strip",
     "plot_population_fraction",
+    "plot_rastermap_embedding",
+    "plot_rastermap_spike_raster",
     "plot_spatial_modules",
     "plot_spike_raster",
     "plot_stacked_dff",
     "plot_state_strip",
+    "rastermap_display_order",
     "resolve_time_limits",
     "select_trace_neurons",
     "shade_states",

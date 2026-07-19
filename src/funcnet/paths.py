@@ -14,6 +14,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 DATA_DIR = PROJECT_ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"
+PHYSIOLOGY_DIR = RAW_DIR / "eeg_emg"
 REFERENCES_DIR = PROJECT_ROOT / "references"
 
 # All script outputs (figures, csv, ...) accumulate here.

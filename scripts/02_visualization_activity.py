@@ -2,7 +2,7 @@
 # # 02 · Visualizing population activity across brain states
 #
 # Before estimating a functional network, first look at the activity itself.
-# This tutorial makes two complementary views:
+# This tutorial makes four complementary views:
 #
 # 1. **Raw ΔF/F activity**, either as stacked traces from a reproducible random
 #    sample of 100 neurons or as a display-aggregated heatmap to which every
@@ -11,7 +11,13 @@
 #    Every neuron is retained; only the time axis is binned to about one second
 #    for display. A population-active-fraction trace makes changes in overall
 #    activity easier to see when thousands of rows are compressed onto the page.
-#
+# 3. **A brain-region-grouped spike raster** containing the same neurons and
+#    events as the activity-ranked raster. Brain regions follow the atlas
+#    labels supplied with the recording, and neurons remain activity-ranked
+#    within each region so the two orderings can be compared directly.
+# 4. **An active-neuron Rastermap view**. This tutorial passes only neurons above
+#    an explicit activity criterion to the official MouseLand implementation,
+#    then shows the one-row-per-neuron raster and adjacent-neuron superneurons.
 # Sleep and anesthesia come from separate recording sessions, so they are shown
 # as separate timelines. The colored strip under every panel is aligned to the
 # original frame-by-frame state vector. In the sleep recording it includes
@@ -19,13 +25,14 @@
 # state-specific analysis epochs into an artificial continuous time series.
 # Dashed vertical lines mark microscope acquisition breaks; time across such a
 # line is cumulative recorded time, not an uninterrupted acquisition.
-# By default, both figures show the **entire recorded sequence**. The settings
+# By default, all figures show the **entire recorded sequence**. The settings
 # below also let you zoom to a chosen time interval without changing the data.
 
 # %%
 import gc
 import os
 import sys
+from contextlib import ExitStack
 
 # add the repo root (parent of scripts/) to the path so `src.funcnet` is importable
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -34,8 +41,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 
-from src.funcnet import dataio, timeseries as ts, visualization as viz
-from src.funcnet.paths import FIG_DIR
+from src.funcnet import (
+    dataio,
+    rastermap_tools as rmt,
+    timeseries as ts,
+    visualization as viz,
+)
+from src.funcnet.paths import FIG_DIR, RESULTS_DIR
 
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -69,17 +81,45 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # - `DISPLAY_BIN_SECONDS`: shared temporal display resolution of the all-neuron
 #   ΔF/F heatmap and spike raster. `POPULATION_SMOOTH_SECONDS` controls only the
 #   summary line.
-# - `SHOW_FIGURES`: when `True`, display every ΔF/F and raster figure in the
+# - `RUN_RASTERMAP`: fit and display the official Rastermap ordering. Unlike the
+#   two baseline rasters, this view deliberately uses only active neurons.
+# - `RASTERMAP_SELECTION_MODE`: the default `"dataset_active"` uses every
+#   finite/nonconstant row in the supplied `nonzero_ROI` mask. That mask is the
+#   dataset's documented activity filter from the publication's complete
+#   network-analysis windows. The optional
+#   `"dataset_active_and_minimum_positive_bin_rate"` adds a fixed support floor;
+#   `"minimum_positive_bin_rate"` omits the dataset mask; and
+#   `"minimum_positive_bins"` uses a duration-dependent numerical-support rule.
+# - `RASTERMAP_MIN_POSITIVE_BIN_RATE_PER_SECOND`: minimum number of positive
+#   OASIS deconvolution samples per primary-state second. It is a numerical
+#   support proxy, not a calibrated physiological firing rate. The paper reports
+#   application cutoffs of 0.1--0.25 Hz, but its public Figure 3 input does not
+#   reveal the exact upstream selection. Tutorials 03--05 audit why a literal
+#   0.10-positive-bin/s conversion is unsuitable across these recordings.
+# - The remaining `RASTERMAP_*` values control the official model. The lag is
+#   expressed in seconds and converted to frames for each session. Cache files
+#   are reused only when all data signatures, settings, and selection metadata
+#   match.
+# - `SHOW_FIGURES`: when `True`, display every ΔF/F, activity-ranked raster,
+#   brain-region-grouped raster, and active-neuron Rastermap figure in the
 #   interactive window. Figures are shown and released one session at a time so
-#   displaying all sessions does not keep all large plot objects in memory.
+#   displaying all sessions does not keep all plot objects in memory.
 #
-# The raster and the `"all"` ΔF/F view never apply `nonzero_ROI` or another
-# neuron filter. Full-session mode requires all files from `download_data.py`,
-# not only `download_data.py --example`. It streams one recording at a time so
-# that the ten large data files are never held in memory simultaneously.
+# Both baseline rasters and the `"all"` ΔF/F view retain every recorded neuron
+# and never apply `nonzero_ROI` or another neuron filter. Rastermap is the
+# intentional exception: it uses the explicit active-neuron population above.
+# The default retains 7,693 of 7,843 rows in `mouse01_sleep` and 3,013 of 4,337
+# in `mouse07_ane`. Tutorial 06 holds this dataset-active population fixed while
+# repeating time-block allocations and fit seeds, so "active-only" should not
+# be read as a calibrated physiological firing-rate threshold.
+# Full-session mode requires all files from `download_data.py`, not only
+# `download_data.py --example`. It streams one recording at a time so the ten
+# large data files are never held in memory simultaneously.
 
 # %%
-RECORDING_MODE = "all"  # "all" = all 10 sessions; "representative" = quick preview
+RECORDING_MODE = (
+    "representative"  # "all" = all 10 sessions; "representative" = quick preview
+)
 
 SLEEP_RECORDINGS = (
     "mouse01_sleep",
@@ -98,7 +138,7 @@ ANESTHESIA_RECORDINGS = (
 REPRESENTATIVE_RECORDINGS = ("mouse01_sleep", "mouse07_ane")
 
 VIEW_WINDOWS_MIN = {
-    "mouse01_sleep": None,       # None = this session's entire sequence
+    "mouse01_sleep": None,  # None = this session's entire sequence
     "mouse02_sleep": None,
     "mouse03_sleep": None,
     "mouse04_day1_sleep": None,
@@ -109,12 +149,29 @@ VIEW_WINDOWS_MIN = {
     "mouse06_ane": None,
     "mouse07_ane": None,
 }
-DFF_VIEW = "sample"            # "sample" = line traces; "all" = all-neuron heatmap
+DFF_VIEW = "sample"  # "sample" = line traces; "all" = all-neuron heatmap
 N_TRACE_NEURONS = 100
 RANDOM_SEED = 7
 DISPLAY_BIN_SECONDS = 1.0
 POPULATION_SMOOTH_SECONDS = 5.0
 SHOW_FIGURES = True
+
+RUN_RASTERMAP = True
+RASTERMAP_SELECTION_MODE = "dataset_active"
+RASTERMAP_MIN_POSITIVE_BIN_RATE_PER_SECOND = 0.020
+RASTERMAP_MIN_POSITIVE_BINS = 50
+RASTERMAP_N_CLUSTERS = 100
+RASTERMAP_N_PCS = 128
+RASTERMAP_LOCALITY = 0.0
+# Five frames in the paper's 3.2-Hz recording span 1.5625 seconds.
+RASTERMAP_TIME_LAG_SECONDS = 5 / 3.2
+RASTERMAP_TIME_BIN = 1
+RASTERMAP_MEAN_TIME = True
+RASTERMAP_SUPERNEURON_SIZE = 50
+RASTERMAP_RANDOM_SEED = 0
+RASTERMAP_DISPLAY_VMIN = 0.0
+RASTERMAP_DISPLAY_VMAX = 1.5
+RASTERMAP_CACHE_DIR = RESULTS_DIR / "cache" / "rastermap"
 
 
 # %% [markdown]
@@ -133,8 +190,200 @@ SHOW_FIGURES = True
 #
 # - `load_view` loads one large session, extracts compact plotting arrays, and
 #   immediately releases the original matrices.
-# - `save_all_session_figures` shows every compact view interactively and also
-#   streams it into the multipage PDFs, one full recording per page.
+# - the explicit Step 6 cell shows every compact view interactively and streams
+#   it into multipage PDFs, one full recording per page.
+
+
+# %% [markdown]
+# ## Helpers for explicit active-neuron Rastermap fitting
+#
+# These helpers keep selection and model fitting separate so the population can
+# be audited before interpreting its order:
+#
+# - `rastermap_selection` returns the Boolean active-neuron mask, a short figure
+#   label, and complete cache provenance. It never samples neurons randomly.
+# - `primary_state_positive_bin_rates` measures support over awake + NREM for
+#   sleep or awake + anesthesia for anesthesia without joining those epochs into
+#   a new activity matrix.
+# - `fit_or_load_rastermap` converts the mask to original ROI row numbers, checks
+#   an exact cache match, and otherwise calls the official MouseLand package.
+#   The returned order is mapped back to original ROI numbers by
+#   `rastermap_tools.fit_selected_neurons`.
+#
+# The lagged similarity calculation treats adjacent matrix columns as adjacent
+# time points. Rastermap 1.0 has no segment mask for microscope breaks, so a few
+# lag pairs can cross a break. Tutorial 04 quantifies this fraction and performs
+# the stronger held-out checks; the figure here remains a descriptive view.
+
+
+# %%
+def primary_state_positive_bin_rates(rec, chunk_frames=2048):
+    """Return positive-bin rates over the two primary states and their labels."""
+    code_legend = dataio.state_codes(rec)
+    primary_labels = (
+        {"awake", "nrem"} if rec.data_info == "sleep" else {"awake", "anesthesia"}
+    )
+    primary_codes = tuple(
+        code for code, label in code_legend.items() if label in primary_labels
+    )
+    selected_frames = np.isin(rec.state, primary_codes)
+    n_selected_frames = int(np.count_nonzero(selected_frames))
+    if n_selected_frames == 0:
+        raise ValueError(f"{rec.name}: no primary-state frames were found")
+
+    positive_counts = np.zeros(rec.n_neurons, dtype=np.int64)
+    for start in range(0, rec.n_frames, chunk_frames):
+        stop = min(rec.n_frames, start + chunk_frames)
+        local_selection = selected_frames[start:stop]
+        if np.any(local_selection):
+            positive_counts += np.count_nonzero(
+                rec.spike_deconv[:, start:stop][:, local_selection] > 0,
+                axis=1,
+            )
+    rates = positive_counts.astype(np.float64) * rec.fs / n_selected_frames
+    return rates, primary_codes, n_selected_frames
+
+
+def rastermap_selection(rec):
+    """Return an explicit active-neuron mask, display label, and provenance."""
+    if RASTERMAP_SELECTION_MODE == "dataset_active":
+        if rec.nonzero_ROI is None:
+            raise ValueError(
+                f"{rec.name}: the selected Rastermap mode requires nonzero_ROI"
+            )
+        mask = rmt.valid_activity_rows(rec.spike_deconv) & rec.nonzero_ROI
+        label = "dataset-active (nonzero_ROI)"
+        metadata = {
+            "definition": "dataset_nonzero_roi_and_finite_nonconstant",
+            "dataset_nonzero_roi_neurons": int(np.count_nonzero(rec.nonzero_ROI)),
+        }
+    elif RASTERMAP_SELECTION_MODE in {
+        "dataset_active_and_minimum_positive_bin_rate",
+        "minimum_positive_bin_rate",
+    }:
+        rates, primary_codes, primary_frame_count = primary_state_positive_bin_rates(
+            rec
+        )
+        mask = rmt.valid_activity_rows(rec.spike_deconv) & (
+            rates >= RASTERMAP_MIN_POSITIVE_BIN_RATE_PER_SECOND
+        )
+        uses_dataset_mask = (
+            RASTERMAP_SELECTION_MODE == "dataset_active_and_minimum_positive_bin_rate"
+        )
+        if uses_dataset_mask:
+            if rec.nonzero_ROI is None:
+                raise ValueError(
+                    f"{rec.name}: the selected Rastermap mode requires nonzero_ROI"
+                )
+            mask &= rec.nonzero_ROI
+        label = ("dataset-active " if uses_dataset_mask else "active ") + (
+            f"(≥{RASTERMAP_MIN_POSITIVE_BIN_RATE_PER_SECOND:g} positive bins/s "
+            "over primary states)"
+        )
+        metadata = {
+            "definition": (
+                "dataset_nonzero_roi_and_finite_nonconstant_and_minimum_"
+                "primary_state_positive_bin_rate_per_second"
+                if uses_dataset_mask
+                else "finite_nonconstant_and_minimum_primary_state_positive_"
+                "bin_rate_per_second"
+            ),
+            "minimum_positive_bin_rate_per_second": (
+                RASTERMAP_MIN_POSITIVE_BIN_RATE_PER_SECOND
+            ),
+            "primary_state_codes": list(primary_codes),
+            "primary_state_frames": primary_frame_count,
+        }
+    elif RASTERMAP_SELECTION_MODE == "minimum_positive_bins":
+        mask = rmt.active_deconvolution_count_rows(
+            rec.spike_deconv,
+            min_positive_bins=RASTERMAP_MIN_POSITIVE_BINS,
+        )
+        effective_rate = RASTERMAP_MIN_POSITIVE_BINS * rec.fs / rec.n_frames
+        label = f"active (≥{RASTERMAP_MIN_POSITIVE_BINS} positive bins)"
+        metadata = {
+            "definition": "finite_nonconstant_and_minimum_positive_bins",
+            "minimum_positive_bins": RASTERMAP_MIN_POSITIVE_BINS,
+            "effective_positive_bin_rate_per_second": effective_rate,
+        }
+    else:
+        raise ValueError(
+            "RASTERMAP_SELECTION_MODE must be "
+            "'dataset_active', 'dataset_active_and_minimum_positive_bin_rate', "
+            "'minimum_positive_bin_rate', or 'minimum_positive_bins'"
+        )
+
+    metadata["selection_label"] = label
+    metadata["selected_neurons"] = int(np.count_nonzero(mask))
+    return mask, label, metadata
+
+
+def fit_or_load_rastermap(rec):
+    """Fit official Rastermap to all selected active rows or reuse an exact cache."""
+    active_mask, selection_label, selection_metadata = rastermap_selection(rec)
+    selected_rows = np.flatnonzero(active_mask)
+    if selected_rows.size < 2:
+        raise ValueError(
+            f"{rec.name}: the Rastermap activity criterion retained fewer than "
+            "two usable neurons"
+        )
+
+    lag_frames = max(
+        0,
+        round(RASTERMAP_TIME_LAG_SECONDS * rec.fs / RASTERMAP_TIME_BIN),
+    )
+    fit_parameters = {
+        "n_clusters": RASTERMAP_N_CLUSTERS,
+        "n_PCs": RASTERMAP_N_PCS,
+        "locality": RASTERMAP_LOCALITY,
+        "time_lag_window": lag_frames,
+        "mean_time": RASTERMAP_MEAN_TIME,
+        "time_bin": RASTERMAP_TIME_BIN,
+        "superneuron_size": RASTERMAP_SUPERNEURON_SIZE,
+        "random_state": RASTERMAP_RANDOM_SEED,
+    }
+    display_parameters = {
+        **fit_parameters,
+        "selection_mode": RASTERMAP_SELECTION_MODE,
+        "selection_label": selection_label,
+    }
+    source_path = dataio.RAW_DIR / f"{rec.name}.mat"
+    metadata = rmt.make_cache_metadata(
+        recording_name=rec.name,
+        n_neurons=rec.n_neurons,
+        n_frames=rec.n_frames,
+        fs=rec.fs,
+        parameters=fit_parameters,
+        neuron_selection=selection_metadata,
+        source_path=source_path,
+    )
+    cache_path = RASTERMAP_CACHE_DIR / f"{rec.name}.npz"
+    result = rmt.load_cache(cache_path, metadata)
+    cached = result is not None
+    print(
+        f"  Rastermap population: {selected_rows.size:,}/{rec.n_neurons:,} "
+        f"{selection_label} ...",
+        flush=True,
+    )
+    if result is None:
+        result = rmt.fit_selected_neurons(
+            rec.spike_deconv,
+            selected_rows,
+            **fit_parameters,
+        )
+        rmt.save_cache(cache_path, result, metadata)
+        print(
+            f"  fitted Rastermap in {result.runtime_seconds:.2f} s; "
+            f"cached -> {cache_path}",
+            flush=True,
+        )
+    else:
+        print(
+            f"  reused exact Rastermap cache ({result.runtime_seconds:.2f} s "
+            "original fit)",
+            flush=True,
+        )
+    return result, cached, display_parameters
 
 
 # %% [markdown]
@@ -143,8 +392,9 @@ SHOW_FIGURES = True
 # The loader intentionally returns all three full `N × T` activity matrices, so
 # one recording can occupy several gigabytes. We load sessions one at a time
 # and retain only sampled traces or a binned ΔF/F heatmap, plus a compact spike
-# raster and population active fraction. In all-session mode, even this compact
-# view is released as soon as its two PDF pages have been written.
+# raster, population active fraction, and two lightweight neuron-order arrays.
+# In all-session mode, even this compact view is released after its PDF pages
+# are written.
 #
 # `spike_deconv` is an OASIS deconvolved spike estimate, not a direct electrical
 # measurement of action potentials. A black raster mark means that a neuron had
@@ -164,12 +414,15 @@ SHOW_FIGURES = True
 #   one row per neuron and only averages neighboring time frames for display.
 # - `ts.segmented_moving_average` smooths the population summary within, never
 #   across, acquisition segments.
+# - `viz.brain_region_order` groups the existing activity-ranked ROI order by
+#   exact atlas region while retaining activity rank within each group.
 # - `prepare_view` runs the relevant helpers while the large recording is loaded
 #   and returns a smaller dictionary used by the plotting functions.
 
+
 # %%
 def prepare_view(rec, seed) -> viz.ActivityView:
-    """Extract only the arrays needed by the two tutorial figures."""
+    """Extract only the arrays needed by the tutorial figures."""
     if DFF_VIEW not in {"sample", "all"}:
         raise ValueError("DFF_VIEW must be 'sample' or 'all'")
     duration_min = rec.n_frames / rec.fs / 60
@@ -178,18 +431,25 @@ def prepare_view(rec, seed) -> viz.ActivityView:
         VIEW_WINDOWS_MIN.get(rec.name),
     )
 
-    print(f"  building a deconvolved-spike raster for all {rec.n_neurons:,} neurons ...", flush=True)
-    raster, active_counts, bin_frames, neuron_order, bin_centers = viz.binned_spike_raster(
-        rec.spike_deconv,
-        rec.fs,
-        DISPLAY_BIN_SECONDS,
-        rec.boundary_ind,
-        rec.state,
+    print(
+        f"  building a deconvolved-spike raster for all {rec.n_neurons:,} neurons ...",
+        flush=True,
+    )
+    raster, active_counts, bin_frames, neuron_order, bin_centers = (
+        viz.binned_spike_raster(
+            rec.spike_deconv,
+            rec.fs,
+            DISPLAY_BIN_SECONDS,
+            rec.boundary_ind,
+            rec.state,
+        )
     )
 
     if DFF_VIEW == "sample":
         trace_ids = viz.select_trace_neurons(rec.n_neurons, N_TRACE_NEURONS, seed)
-        print(f"  copying raw ΔF/F for {trace_ids.size} selected neurons ...", flush=True)
+        print(
+            f"  copying raw ΔF/F for {trace_ids.size} selected neurons ...", flush=True
+        )
         dff = rec.dFF[trace_ids].copy()
         dff_heatmaps = None
         dff_color_limit = None
@@ -218,8 +478,15 @@ def prepare_view(rec, seed) -> viz.ActivityView:
         for boundary in np.asarray(rec.boundary_ind).ravel()
         if 0 <= int(boundary) < rec.n_frames - 1
     ]
+    atlas_labels = (
+        rec.atlas
+        if rec.atlas is not None
+        else np.full(rec.n_neurons, None, dtype=object)
+    )
+    brain_regions = viz.brain_region_labels(atlas_labels)
+    region_order = viz.brain_region_order(brain_regions, neuron_order)
 
-    return {
+    view: viz.ActivityView = {
         "name": rec.name,
         "data_info": rec.data_info,
         "n_neurons": rec.n_neurons,
@@ -240,12 +507,37 @@ def prepare_view(rec, seed) -> viz.ActivityView:
         "bin_frames": bin_frames,
         "bin_centers_min": bin_centers / rec.fs / 60,
         "neuron_order": neuron_order,
+        "brain_regions": brain_regions,
+        "brain_region_order": region_order,
         "boundary_minutes": boundary_minutes,
         "acquisition_segments": ts.acquisition_segments(
             rec.n_frames,
             rec.boundary_ind,
         ),
     }
+    if RUN_RASTERMAP:
+        rastermap_result, cached, parameters = fit_or_load_rastermap(rec)
+        view.update(
+            {
+                "rastermap_X_embedding": rastermap_result.X_embedding,
+                "rastermap_embedding": rastermap_result.embedding,
+                "rastermap_isort": rastermap_result.isort,
+                "rastermap_valid_rows": rastermap_result.valid_rows,
+                "rastermap_runtime_seconds": rastermap_result.runtime_seconds,
+                "rastermap_cached": cached,
+                "rastermap_display_selected_only": True,
+                "rastermap_stop_min": (
+                    rastermap_result.X_embedding.shape[1]
+                    * RASTERMAP_TIME_BIN
+                    / rec.fs
+                    / 60
+                ),
+                "rastermap_parameters": parameters,
+                "rastermap_version": rmt.installed_rastermap_version(),
+            }
+        )
+    return view
+
 
 # %% [markdown]
 # ## Figure 1 — ΔF/F as sampled traces or an all-neuron heatmap
@@ -258,6 +550,7 @@ def prepare_view(rec, seed) -> viz.ActivityView:
 # enters a temporal display-bin mean. Rows use the same whole-session activity
 # ranking as the spike raster. Antialiased rendering compresses thousands of
 # rows onto the page, so use the sampled mode when individual traces matter.
+
 
 # %%
 def make_dff_figure(views, page_label=None):
@@ -304,6 +597,7 @@ def make_dff_figure(views, page_label=None):
 # thousands. The line above each raster is the percentage of neurons with a
 # positive estimate in each original frame, smoothed over five seconds.
 
+
 # %%
 def make_raster_figure(views, page_label=None):
     """Build the all-neuron raster figure for compact recording views."""
@@ -329,33 +623,187 @@ def make_raster_figure(views, page_label=None):
 
 
 # %% [markdown]
+# ## Figure 3 — deconvolved-spike raster grouped by brain region
+#
+# This view contains exactly the same neurons, positive deconvolution samples,
+# temporal display bins, and population summary as Figure 2. Only the row order
+# changes. Neurons are grouped by the recording's row-aligned atlas acronyms,
+# following the shared anatomical color order. Within every region they
+# retain the whole-session activity rank used in Figure 2.
+#
+# The narrow strip at the left contains one categorical region color for every
+# neuron row. Thin horizontal lines mark region boundaries. The layer `2/3`
+# suffix is removed for display, but all 17 atlas acronyms in this dataset remain
+# distinct. `Other` handles an unexpected valid label and `Unknown` a missing or
+# unassigned label. No neuron is filtered or averaged.
+
+
+# %%
+def make_region_raster_figure(views, page_label=None):
+    """Build all-neuron spike rasters grouped by exact atlas region."""
+    fig = plt.figure(figsize=(15, 6 * len(views) + 0.8), constrained_layout=True)
+    grid = fig.add_gridspec(
+        3 * len(views) + 1,
+        2,
+        width_ratios=(0.22, 20),
+        height_ratios=[value for _view in views for value in (1.0, 3.8, 0.34)] + [0.65],
+    )
+    shown_brain_regions = set()
+    for row, view in enumerate(views):
+        rate_ax = fig.add_subplot(grid[3 * row, 1])
+        area_ax = fig.add_subplot(grid[3 * row + 1, 0])
+        spike_ax = fig.add_subplot(grid[3 * row + 1, 1], sharex=rate_ax)
+        state_ax = fig.add_subplot(grid[3 * row + 2, 1], sharex=rate_ax)
+        viz.plot_population_fraction(rate_ax, view)
+        viz.plot_brain_region_spike_raster(spike_ax, view)
+        region_order = view["brain_region_order"]
+        viz.plot_brain_region_strip(
+            area_ax,
+            view["brain_regions"],
+            region_order,
+        )
+        spike_ax.set_ylabel("")
+        area_ax.set_ylabel("all neurons\n(grouped by atlas region)", labelpad=8)
+        shown_brain_regions.update(view["brain_regions"].tolist())
+        viz.plot_state_strip(state_ax, view)
+
+    region_handles = viz.brain_region_legend_handles(
+        [region for region in viz.BRAIN_REGION_COLORS if region in shown_brain_regions]
+    )
+    region_legend_ax = fig.add_subplot(grid[-1, :])
+    region_legend_ax.axis("off")
+    region_legend_ax.legend(
+        handles=region_handles,
+        loc="center",
+        ncol=min(9, len(region_handles)),
+        frameon=False,
+        title="Atlas region (activity-ranked within each region)",
+    )
+    title = "Brain-region-grouped deconvolved-spike rasters and population activity"
+    if page_label is not None:
+        title = f"{title} · {page_label}"
+    fig.suptitle(title, fontsize=15)
+    return fig
+
+
+# %% [markdown]
+# ## Figure 4 — active-neuron raster sorted by Rastermap
+#
+# Rastermap is fit to every neuron that passes the configured activity rule;
+# there is no random neuron selection. The upper raster keeps one row per
+# selected neuron, while the lower heatmap averages adjacent sorted neurons in
+# groups of at most `RASTERMAP_SUPERNEURON_SIZE` for a paper-style overview.
+# Both panels retain the complete recorded sequence. The narrow strip at left
+# supplies cortical-region context only; spatial localization is not used to
+# fit or sort the neurons.
+#
+# This is a visualization, not proof that the fine neuron order is unique.
+# Tutorials 03 and 04 check normalization, PCA, cluster sorting, seed/tuning
+# sensitivity, time-block transfer, and synthetic controls before making that
+# distinction.
+
+
+# %%
+def make_rastermap_figure(views, page_label=None):
+    """Build active-only Rastermap rasters and superneuron views."""
+    if not RUN_RASTERMAP:
+        raise ValueError("Set RUN_RASTERMAP=True before building this figure")
+
+    fig = plt.figure(figsize=(15, 9 * len(views) + 0.8), constrained_layout=True)
+    grid = fig.add_gridspec(
+        4 * len(views) + 1,
+        2,
+        width_ratios=(0.22, 20),
+        height_ratios=[value for _view in views for value in (1.0, 3.4, 3.4, 0.34)]
+        + [0.65],
+    )
+    region_handles_by_label = {}
+    for row, view in enumerate(views):
+        rate_ax = fig.add_subplot(grid[4 * row, 1])
+        area_ax = fig.add_subplot(grid[4 * row + 1, 0])
+        spike_ax = fig.add_subplot(grid[4 * row + 1, 1], sharex=rate_ax)
+        embedding_ax = fig.add_subplot(grid[4 * row + 2, 1], sharex=rate_ax)
+        state_ax = fig.add_subplot(grid[4 * row + 3, 1], sharex=rate_ax)
+
+        viz.plot_population_fraction(rate_ax, view)
+        rate_ax.set_ylabel("% all recorded neurons\nactive (5-s mean)")
+        viz.plot_rastermap_spike_raster(spike_ax, view)
+        rastermap_order = np.asarray(view["rastermap_isort"], dtype=np.int64)
+        _, region_handles = viz.plot_cortical_region_strip(
+            area_ax,
+            view["brain_regions"],
+            rastermap_order,
+        )
+        for handle in region_handles:
+            region_handles_by_label[handle.get_label()] = handle
+        image = viz.plot_rastermap_embedding(
+            embedding_ax,
+            view,
+            vmin=RASTERMAP_DISPLAY_VMIN,
+            vmax=RASTERMAP_DISPLAY_VMAX,
+        )
+        colorbar = fig.colorbar(
+            image,
+            ax=embedding_ax,
+            pad=0.01,
+            fraction=0.025,
+        )
+        colorbar.set_label("normalized superneuron activity")
+        viz.plot_state_strip(state_ax, view)
+
+    legend_ax = fig.add_subplot(grid[-1, :])
+    legend_ax.axis("off")
+    stable_handles = [
+        region_handles_by_label[region]
+        for region in viz.CORTICAL_REGION_COLORS
+        if region in region_handles_by_label
+    ]
+    legend_ax.legend(
+        handles=stable_handles,
+        loc="center",
+        ncol=min(6, len(stable_handles)),
+        frameon=False,
+        title="Cortical area of active selected neurons (annotation only)",
+    )
+
+    title = "Active-neuron Rastermap ordering across complete recordings"
+    if page_label is not None:
+        title = f"{title} · {page_label}"
+    fig.suptitle(title, fontsize=15)
+    return fig
+
+
+# %% [markdown]
 # ## Load and save the selected recording set
 #
-# `RECORDING_MODE = "all"` writes one full recording per PDF page. Four files
-# are produced: ΔF/F and spike-raster PDFs for sleep and anesthesia. Streaming
-# keeps peak memory near the cost of one recording, and separate pages keep the
-# complete time axes legible. With `SHOW_FIGURES = True`, every page is also
-# displayed in the interactive window as soon as it is created.
+# `RECORDING_MODE = "all"` writes one full recording per PDF page. With
+# `RUN_RASTERMAP = True`, eight files are produced: ΔF/F, activity-ranked raster,
+# brain-region-grouped raster, and active-neuron Rastermap PDFs for sleep and
+# anesthesia. Turning Rastermap off produces the other six. Streaming keeps peak
+# memory near the cost of one recording, and separate pages keep the complete
+# time axes legible. With `SHOW_FIGURES = True`, every page is also displayed in
+# the interactive window as soon as it is created.
 #
 # `RECORDING_MODE = "representative"` instead loads the two preview sessions,
 # places them in the original combined PNG figures, and displays them. Changing
 # `VIEW_WINDOWS_MIN` to a tuple only zooms the named page; every `None` entry
 # above retains that session's complete sequence.
 #
-# The helpers below handle output rather than scientific transformations:
+# The small helpers below handle repeated loading/name choices rather than
+# scientific transformations:
 #
 # - `load_view` loads and compacts one recording, then frees its large matrices.
 # - `dff_output_stem` gives sampled traces and the optional all-neuron heatmap
 #   distinct filenames.
-# - `save_representative_figures` writes the fast two-session PNG preview.
-# - `save_all_session_figures` displays every session and writes the four
-#   all-session multipage PDFs.
+#
+# The actual execution is deliberately *not* wrapped in a `main()` function.
+# Run the cells below in order: load the compact views, inspect each figure, and
+# optionally stream the complete ten-session set to PDFs.
 
 # %%
 ALL_RECORDINGS = SLEEP_RECORDINGS + ANESTHESIA_RECORDINGS
 TRACE_SEED_BY_RECORDING = {
-    name: RANDOM_SEED + index
-    for index, name in enumerate(ALL_RECORDINGS)
+    name: RANDOM_SEED + index for index, name in enumerate(ALL_RECORDINGS)
 }
 
 
@@ -381,52 +829,130 @@ def dff_output_stem():
     raise ValueError("DFF_VIEW must be 'sample' or 'all'")
 
 
-def save_representative_figures():
-    """Save the two-session PNG preview and optionally display it."""
-    views = []
-    dff_fig = None
-    raster_fig = None
-    try:
-        views.extend(load_view(name) for name in REPRESENTATIVE_RECORDINGS)
+# %% [markdown]
+# ### Step 1 — load the two-session interactive preview
+#
+# This cell performs data loading only. The four following cells build the
+# figures one at a time, leaving their figure objects in the workspace so axes
+# and arrays can be inspected interactively.
 
-        dff_fig = make_dff_figure(views)
-        dff_path = FIG_DIR / f"{dff_output_stem()}.png"
-        dff_fig.savefig(dff_path, dpi=150, bbox_inches="tight")
-        print("saved ->", dff_path)
+# %%
+if RECORDING_MODE not in {"all", "representative"}:
+    raise ValueError("RECORDING_MODE must be 'all' or 'representative'")
 
-        raster_fig = make_raster_figure(views)
-        raster_path = FIG_DIR / "02_spike_rasters.png"
-        raster_fig.savefig(raster_path, dpi=150, bbox_inches="tight")
-        print("saved ->", raster_path)
-        if SHOW_FIGURES:
-            plt.show()
-    finally:
-        if dff_fig is not None:
-            plt.close(dff_fig)
-        if raster_fig is not None:
-            plt.close(raster_fig)
-        views.clear()
-        gc.collect()
+representative_views = []
+if RECORDING_MODE == "representative":
+    representative_views = [
+        load_view(recording_name) for recording_name in REPRESENTATIVE_RECORDINGS
+    ]
+else:
+    print("RECORDING_MODE='all': skip to Step 6 for streamed all-session figures")
 
 
-def save_all_session_figures():
-    """Display and stream every recording into condition-specific PDFs."""
-    groups = (
+# %% [markdown]
+# ### Step 2 — inspect raw ΔF/F
+
+# %%
+dff_fig = None
+if representative_views:
+    dff_fig = make_dff_figure(representative_views)
+    dff_path = FIG_DIR / f"{dff_output_stem()}.png"
+    dff_fig.savefig(dff_path, dpi=150, bbox_inches="tight")
+    print("saved ->", dff_path)
+    if SHOW_FIGURES:
+        plt.show()
+
+
+# %% [markdown]
+# ### Step 3 — inspect the activity-ranked binary spike raster
+#
+# This is the simple baseline ordering: neurons with more positive deconvolved
+# samples over the complete session appear near the top.
+
+# %%
+raster_fig = None
+if representative_views:
+    raster_fig = make_raster_figure(representative_views)
+    raster_path = FIG_DIR / "02_spike_rasters_by_activity.png"
+    raster_fig.savefig(raster_path, dpi=150, bbox_inches="tight")
+    print("saved ->", raster_path)
+    if SHOW_FIGURES:
+        plt.show()
+
+
+# %% [markdown]
+# ### Step 4 — inspect the brain-region-grouped binary spike raster
+#
+# The binary events are identical to Step 3; only the neuron order changes.
+# Every atlas-region block remains activity-ranked internally.
+
+# %%
+region_raster_fig = None
+if representative_views:
+    region_raster_fig = make_region_raster_figure(representative_views)
+    region_raster_path = FIG_DIR / "02_spike_rasters_by_region.png"
+    region_raster_fig.savefig(region_raster_path, dpi=150, bbox_inches="tight")
+    print("saved ->", region_raster_path)
+    if SHOW_FIGURES:
+        plt.show()
+
+
+# %% [markdown]
+# ### Step 5 — inspect the active-neuron Rastermap order
+#
+# Unlike Steps 3--4, this view excludes neurons below the explicit activity
+# threshold. The order uses the official model and every recorded frame; the
+# cortical strip is annotation, not an input to Rastermap.
+
+# %%
+rastermap_fig = None
+if representative_views and RUN_RASTERMAP:
+    rastermap_fig = make_rastermap_figure(representative_views)
+    rastermap_path = FIG_DIR / "02_rastermap.png"
+    rastermap_fig.savefig(rastermap_path, dpi=150, bbox_inches="tight")
+    print("saved ->", rastermap_path)
+    if SHOW_FIGURES:
+        plt.show()
+
+
+# %% [markdown]
+# ### Step 6 — optionally stream every sleep and anesthesia session
+#
+# Set `RECORDING_MODE = "all"` in the settings cell, then run this cell. Only one
+# large recording is resident at a time. Each page is saved and shown before
+# the corresponding compact view is released.
+
+# %%
+if RECORDING_MODE == "all":
+    recording_groups = (
         ("sleep", SLEEP_RECORDINGS),
         ("anesthesia", ANESTHESIA_RECORDINGS),
     )
-    for condition, recording_names in groups:
+    for condition, recording_names in recording_groups:
         dff_path = FIG_DIR / f"{dff_output_stem()}_{condition}_all_sessions.pdf"
-        raster_path = FIG_DIR / f"02_spike_rasters_{condition}_all_sessions.pdf"
+        raster_path = (
+            FIG_DIR / f"02_spike_rasters_by_activity_{condition}_all_sessions.pdf"
+        )
+        region_raster_path = (
+            FIG_DIR / f"02_spike_rasters_by_region_{condition}_all_sessions.pdf"
+        )
+        rastermap_path = FIG_DIR / f"02_rastermap_{condition}_all_sessions.pdf"
         metadata = {
             "Title": f"Population activity: all {condition} recording sessions",
             "Subject": "One complete calcium-imaging recording per page",
         }
 
-        with (
-            PdfPages(dff_path, metadata=metadata) as dff_pdf,
-            PdfPages(raster_path, metadata=metadata) as raster_pdf,
-        ):
+        with ExitStack() as outputs:
+            dff_pdf = outputs.enter_context(PdfPages(dff_path, metadata=metadata))
+            raster_pdf = outputs.enter_context(PdfPages(raster_path, metadata=metadata))
+            region_raster_pdf = outputs.enter_context(
+                PdfPages(region_raster_path, metadata=metadata)
+            )
+            rastermap_pdf = (
+                outputs.enter_context(PdfPages(rastermap_path, metadata=metadata))
+                if RUN_RASTERMAP
+                else None
+            )
             for page, recording_name in enumerate(recording_names, start=1):
                 print(
                     f"{condition} session {page}/{len(recording_names)}: "
@@ -434,39 +960,64 @@ def save_all_session_figures():
                     flush=True,
                 )
                 view = load_view(recording_name)
-                page_label = f"{condition.title()} session {page}/{len(recording_names)}"
+                page_label = (
+                    f"{condition.title()} session {page}/{len(recording_names)}"
+                )
 
-                dff_fig = make_dff_figure((view,), page_label=page_label)
-                try:
-                    dff_pdf.savefig(dff_fig, dpi=150, bbox_inches="tight")
+                session_dff_fig = make_dff_figure((view,), page_label=page_label)
+                dff_pdf.savefig(session_dff_fig, dpi=150, bbox_inches="tight")
+                if SHOW_FIGURES:
+                    plt.show()
+                plt.close(session_dff_fig)
+
+                session_raster_fig = make_raster_figure(
+                    (view,),
+                    page_label=page_label,
+                )
+                raster_pdf.savefig(
+                    session_raster_fig,
+                    dpi=150,
+                    bbox_inches="tight",
+                )
+                if SHOW_FIGURES:
+                    plt.show()
+                plt.close(session_raster_fig)
+
+                session_region_raster_fig = make_region_raster_figure(
+                    (view,),
+                    page_label=page_label,
+                )
+                region_raster_pdf.savefig(
+                    session_region_raster_fig,
+                    dpi=150,
+                    bbox_inches="tight",
+                )
+                if SHOW_FIGURES:
+                    plt.show()
+                plt.close(session_region_raster_fig)
+
+                if rastermap_pdf is not None:
+                    session_rastermap_fig = make_rastermap_figure(
+                        (view,),
+                        page_label=page_label,
+                    )
+                    rastermap_pdf.savefig(
+                        session_rastermap_fig,
+                        dpi=150,
+                        bbox_inches="tight",
+                    )
                     if SHOW_FIGURES:
                         plt.show()
-                finally:
-                    plt.close(dff_fig)
-                del dff_fig
-
-                raster_fig = make_raster_figure((view,), page_label=page_label)
-                try:
-                    raster_pdf.savefig(raster_fig, dpi=150, bbox_inches="tight")
-                    if SHOW_FIGURES:
-                        plt.show()
-                finally:
-                    plt.close(raster_fig)
-                del raster_fig
+                    plt.close(session_rastermap_fig)
 
                 del view
                 gc.collect()
 
         print("saved ->", dff_path)
         print("saved ->", raster_path)
-
-
-if RECORDING_MODE == "representative":
-    save_representative_figures()
-elif RECORDING_MODE == "all":
-    save_all_session_figures()
-else:
-    raise ValueError("RECORDING_MODE must be 'all' or 'representative'")
+        print("saved ->", region_raster_path)
+        if RUN_RASTERMAP:
+            print("saved ->", rastermap_path)
 
 
 # %% [markdown]
@@ -478,6 +1029,15 @@ else:
 # - In the raster, vertical concentrations of black marks indicate many neurons
 #   becoming active at similar times. Differences from top to bottom reflect
 #   neurons' overall positive-sample counts because the rows are activity-ranked.
+# - In the brain-region figure, compare each atlas block with Figure 2. The
+#   events are identical, and neurons remain activity-ranked inside each block;
+#   only the between-region grouping changes. Look for region-specific periods
+#   of dense or sparse activity around state transitions.
+# - In the Rastermap figure, look for smooth sequences or repeated bands that
+#   become clearer after activity selection and ordering. The lower panel is an
+#   adjacent-neuron average, so confirm any apparent pattern in the one-row-per-
+#   selected-neuron raster above it. A striking image alone does not establish a
+#   unique neuron order; tutorial 04 tests that order out of sample.
 # - Use the population-active-fraction line to compare overall activity with
 #   the exact state strip. Treat it as descriptive, not a statistical state test.
 # - The next tutorials use long, stable `used_frame` epochs for quantitative

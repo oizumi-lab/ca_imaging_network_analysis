@@ -71,10 +71,10 @@ finding: **modularity is higher during unconsciousness.** Spot check at K = 5 %:
 The full script aggregates this across densities and animals for both the sleep
 and anesthesia datasets.
 
-## Known limitation
+## Atlas-label compatibility
 
-`ROIs.atlas` (per-neuron region acronyms) is a MATLAB *string-class* object that
-neither `pymatreader` nor `h5py` decode; it is exposed as `None`. It is not
-needed for single-cell modularity. Region/mesoscale analyses that need it would
-require re-exporting the field as `cellstr`/char from MATLAB, or an MCOS string
-decoder.
+`ROIs.atlas` (per-neuron region acronyms) is stored as a MATLAB *string-class*
+MCOS object, which `pymatreader` does not decode directly. The project loader
+now decodes the v2.0 object's packed UTF-16 payload with `h5py` and exposes one
+row-aligned label per neuron through `Recording.atlas`. The spatial panel in
+`scripts/00_inspect_data.py` validates and visualizes those labels.

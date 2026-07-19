@@ -33,7 +33,13 @@ from . import (
     timeseries,
 )
 
-_LAZY_MODULES = {"coarsegrain", "statistics", "visualization"}
+_LAZY_MODULES = {
+    "coarsegrain",
+    "physiology",
+    "rastermap_tools",
+    "statistics",
+    "visualization",
+}
 
 
 def __getattr__(name: str):
@@ -54,6 +60,8 @@ __all__ = [
     "dataio",
     "network",
     "paths",
+    "physiology",
+    "rastermap_tools",
     "smallworld",
     "statistics",
     "timeseries",

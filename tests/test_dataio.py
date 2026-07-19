@@ -32,6 +32,43 @@ def synthetic_recording(
     )
 
 
+def packed_string_payload(labels: list[str]) -> np.ndarray:
+    """Build the compact v2 MCOS stream used by the atlas decoder."""
+    lengths = np.array([len(label.encode("utf-16le")) // 2 for label in labels])
+    encoded = "".join(labels).encode("utf-16le")
+    encoded += b"\0" * (-len(encoded) % 8)
+    words = np.frombuffer(encoded, dtype="<u8")
+    return np.concatenate(
+        [
+            np.array([1, 2, len(labels), 1], dtype=np.uint64),
+            lengths.astype(np.uint64),
+            words,
+        ]
+    )
+
+
+class AtlasStringDecodingTests(unittest.TestCase):
+    def test_variable_length_labels_cross_packed_word_boundaries(self) -> None:
+        labels = ["MOs2/3", "SSp-bfd2/3", "RSPd2/3", "root"]
+
+        decoded = dataio._decode_mcos_string_payload(
+            packed_string_payload(labels),
+            expected_count=len(labels),
+        )
+
+        self.assertEqual(decoded, labels)
+
+    def test_malformed_header_and_truncated_payload_are_rejected(self) -> None:
+        payload = packed_string_payload(["MOp2/3", "SSp-ul2/3"])
+        malformed = payload.copy()
+        malformed[0] = 99
+
+        with self.assertRaises(ValueError):
+            dataio._decode_mcos_string_payload(malformed, expected_count=2)
+        with self.assertRaises(ValueError):
+            dataio._decode_mcos_string_payload(payload[:-1], expected_count=2)
+
+
 class StateCodeTests(unittest.TestCase):
     def test_state_codes_dispatch_by_recording_type(self) -> None:
         self.assertEqual(

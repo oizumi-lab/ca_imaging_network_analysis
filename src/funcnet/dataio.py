@@ -36,11 +36,10 @@ v1 -> v2 variable mapping
     (separate files) -> data_info        ('sleep' | 'ane')
     (n/a)            -> nonzero_ROI       (activity filter used in the paper)
 
-Known limitation: ``ROIs.atlas`` is a MATLAB *string-class* array stored as an
-opaque MCOS object. Neither ``pymatreader`` nor ``h5py`` decode it cleanly, so
-``Recording.atlas`` is ``None`` for now. Region labels are not needed for the
-single-cell modularity analysis (the first hands-on); this is only relevant for
-region/mesoscale work. See documents/01_reproduction_report.md.
+``ROIs.atlas`` is a MATLAB *string-class* array stored through an MCOS payload.
+``pymatreader`` does not decode that object, so this loader reads the compact
+UTF-16 payload directly with ``h5py`` and exposes one row-aligned cortical-region
+acronym per neuron through ``Recording.atlas``.
 """
 
 from __future__ import annotations
@@ -49,6 +48,7 @@ import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import h5py
 import numpy as np
 from pymatreader import read_mat
 
@@ -155,6 +155,82 @@ def _resolve_path(path_or_name: str | Path) -> Path:
     )
 
 
+def _decode_mcos_string_payload(
+    payload: np.ndarray,
+    expected_count: int,
+) -> list[str]:
+    """Decode the packed MATLAB-v2 string payload used by ``ROIs.atlas``.
+
+    The dataset stores ``[1, 2, N, 1]``, followed by ``N`` UTF-16 code-unit
+    lengths and then four little-endian UTF-16 units per uint64 word. Keeping
+    this format-specific operation separate makes it straightforward to test
+    without loading a multi-gigabyte recording.
+    """
+    values = np.asarray(payload, dtype=np.uint64).ravel()
+    if expected_count <= 0:
+        raise ValueError("expected_count must be positive")
+    header = np.array([1, 2, expected_count, 1], dtype=np.uint64)
+    if values.size < 4 + expected_count or not np.array_equal(values[:4], header):
+        raise ValueError("unrecognized MATLAB string payload header")
+
+    lengths = values[4 : 4 + expected_count].astype(np.int64)
+    if np.any(lengths < 0):
+        raise ValueError("MATLAB string payload contains a negative length")
+    total_units = int(lengths.sum())
+    expected_words = (total_units + 3) // 4
+    packed = values[4 + expected_count :]
+    if packed.size != expected_words:
+        raise ValueError("MATLAB string payload size does not match its lengths")
+
+    shifts = np.array([0, 16, 32, 48], dtype=np.uint64)
+    code_units = ((packed[:, None] >> shifts) & 0xFFFF).astype("<u2").ravel()
+    code_units = code_units[:total_units]
+
+    labels: list[str] = []
+    start = 0
+    for length in lengths:
+        stop = start + int(length)
+        labels.append(code_units[start:stop].tobytes().decode("utf-16le"))
+        start = stop
+    return labels
+
+
+def _decode_v2_mcos_atlas(path: Path, expected_count: int) -> list[str] | None:
+    """Locate and decode the unique MCOS string payload for ``ROIs.atlas``."""
+    with h5py.File(path, "r") as mat:
+        if "ROIs/atlas" not in mat:
+            return None
+        atlas_dataset = mat["ROIs/atlas"]
+        if atlas_dataset.attrs.get("MATLAB_class") != b"string":
+            return None
+        if "#subsystem#/MCOS" not in mat:
+            raise ValueError("MATLAB string object has no MCOS subsystem payload")
+
+        decoded_candidates: list[list[str]] = []
+        for reference in np.asarray(mat["#subsystem#/MCOS"]).ravel():
+            if not reference:
+                continue
+            candidate = mat[reference]
+            if (
+                not isinstance(candidate, h5py.Dataset)
+                or candidate.dtype.kind != "u"
+                or candidate.dtype.itemsize != 8
+            ):
+                continue
+            try:
+                labels = _decode_mcos_string_payload(candidate[...], expected_count)
+            except ValueError:
+                continue
+            decoded_candidates.append(labels)
+
+    if len(decoded_candidates) != 1:
+        raise ValueError(
+            "expected one row-aligned MCOS atlas payload, found "
+            f"{len(decoded_candidates)}"
+        )
+    return decoded_candidates[0]
+
+
 def load_recording(path_or_name: str | Path) -> Recording:
     """Load one ``.mat`` recording into a :class:`Recording`.
 
@@ -166,8 +242,8 @@ def load_recording(path_or_name: str | Path) -> Recording:
     """
     path = _resolve_path(path_or_name)
 
-    # pymatreader emits warnings about the (un-decodable) string atlas; silence
-    # those here and report the consequence ourselves.
+    # pymatreader warns about the MCOS string object. We decode that field
+    # separately below, while retaining pymatreader for the numerical arrays.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
         raw = read_mat(str(path))
@@ -197,13 +273,23 @@ def load_recording(path_or_name: str | Path) -> Recording:
         for i in range(min(len(labels), len(uf_list)))
     }
 
-    # atlas (string class) usually undecodable -> None.
+    # Future pymatreader versions may decode the string array directly. Prefer
+    # that result when available; otherwise use the v2 MCOS payload decoder.
     atlas_raw = rois.get("atlas")
     atlas = None
     if isinstance(atlas_raw, (list, np.ndarray)) and np.size(atlas_raw) and not (
         isinstance(atlas_raw, np.ndarray) and atlas_raw.dtype.kind in "uif"
     ):
         atlas = [str(a) for a in np.atleast_1d(atlas_raw).ravel()]
+    if atlas is None:
+        try:
+            atlas = _decode_v2_mcos_atlas(path, centroid.shape[0])
+        except (KeyError, OSError, ValueError) as exc:
+            warnings.warn(
+                f"Could not decode cortical-region labels from {path.name}: {exc}",
+                UserWarning,
+                stacklevel=2,
+            )
 
     nz = raw.get("nonzero_ROI")
     nonzero_ROI = None if nz is None else np.atleast_1d(np.asarray(nz)).ravel().astype(bool)
@@ -233,6 +319,8 @@ def _validate(rec: Recording) -> None:
         assert getattr(rec, nm).shape == (n, t), f"{nm} shape != spike_smoothed"
     assert rec.state.shape[0] == t, "state length != n_frames"
     assert rec.centroid.shape[0] == n, "centroid rows != n_neurons"
+    if rec.atlas is not None:
+        assert len(rec.atlas) == n, "atlas length != n_neurons"
     if rec.nonzero_ROI is not None:
         assert rec.nonzero_ROI.shape[0] == n, "nonzero_ROI length != n_neurons"
     for lab, idx in rec.used_frame.items():
