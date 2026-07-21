@@ -36,26 +36,24 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 #
 # - `DETAILED_RECORDING` chooses the complete session used by the activity and
 #   spatial examples after the ten-session inventory.
-# - `TRACE_EXAMPLE_COUNTS` makes separate full-session raw ΔF/F figures so the
-#   readability of 100, 200, 300, 500, and 1,000 traces can be compared at the
-#   same physical figure size. These samples affect only this diagnostic plot.
-# - `RECOMMENDED_TRACE_COUNT = 200` is the practical default: 100 is very clear,
-#   300 is a usable upper bound, while 500 and especially 1,000 become visually
-#   dense. Keeping the larger examples is useful because it shows the limitation
-#   rather than hiding it.
-# - `TRACE_RANDOM_SEED` makes the random selection exactly reproducible. Smaller
-#   examples are nested subsets of the 1,000-neuron pool, making the comparison
-#   fair without favoring low-numbered ROI rows.
+# - `COMPARISON_NEURON_COUNT` controls the row-aligned raw ΔF/F versus smoothed
+#   deconvolved-signal comparison. Ten neurons keeps both panels readable.
+# - `COMPARISON_TIME_RANGE_MIN` sets its recorded-time start and end in minutes.
+#   The default shows minutes 0–5; use `None` to restore the complete session.
+# - `DFF_NEURON_COUNT` controls the separate full-session raw ΔF/F example.
+#   Its default is 100 neurons; change this one scalar to show another count.
+# - `TRACE_RANDOM_SEED` makes both random selections exactly reproducible without
+#   favoring low-numbered ROI rows.
 # - `EEG_MAX_FREQUENCY_HZ` and `EEG_WINDOW_SECONDS` control only the synchronized
 #   inspection spectrogram. EEG and EMG are prepared independently inside every
 #   acquisition segment, so filtering never crosses a microscope break.
 
 # %%
 DETAILED_RECORDING = "mouse02_sleep"
-DETAILED_RECORDING = "mouse03_ane"
-# TRACE_EXAMPLE_COUNTS = (100, 200, 300, 500, 1000)
-TRACE_EXAMPLE_COUNTS = (50, 100, 200)
-RECOMMENDED_TRACE_COUNT = 200
+# DETAILED_RECORDING = "mouse03_ane"
+COMPARISON_NEURON_COUNT = 10
+COMPARISON_TIME_RANGE_MIN = (0.0, 5.0)  # (start_min, end_min), or None
+DFF_NEURON_COUNT = 100
 TRACE_RANDOM_SEED = 7
 EEG_MAX_FREQUENCY_HZ = 25.0
 EEG_WINDOW_SECONDS = 4.0
@@ -329,10 +327,11 @@ print("saved ->", summary_figure_path)
 # %% [markdown]
 # ## Inspect one example recording in detail
 #
-# Now that we know the scale of the complete dataset, load the full
-# session selected by `DETAILED_RECORDING`. Nothing below applies the
-# ``nonzero_ROI`` mask or samples neuron rows. Swap in another full recording
-# name, e.g. ``"mouse07_ane"``, in the settings to inspect a different session.
+# Now that we know the scale of the complete dataset, load the full session
+# selected by `DETAILED_RECORDING`. Nothing below applies the ``nonzero_ROI``
+# mask. The two stacked-trace displays sample rows only for readability; later
+# panels explicitly show every neuron. Swap in another full recording name,
+# e.g. ``"mouse07_ane"``, in the settings to inspect a different session.
 
 # %%
 rec = dataio.load_recording(DETAILED_RECORDING)
@@ -375,49 +374,30 @@ for v, c in zip(vals, counts):
     print(f"  state {v:>4}  = {codes.get(v, '?'):<12}  {c:6d} frames ({100*c/rec.n_frames:.1f}%)")
 
 # %% [markdown]
-# ## Raw ΔF/F trace-count examples
+# ## Raw ΔF/F versus the network-analysis signal
 #
-# These figures answer a display question, not a neuron-selection question for
-# later analyses. Each panel uses the complete recorded time sequence and raw
-# 7.65-Hz ΔF/F samples. Traces are only median-centered and translated by a
-# common vertical offset; they are not smoothed, temporally downsampled,
-# clipped, or z-scored. The state strip remains exactly aligned to the original
-# frame labels.
+# The top and bottom panels below contain the **same randomly selected neuron
+# rows in the same order** over the selected recorded-time window. The top shows
+# raw 7.65-Hz ΔF/F. The bottom shows ``spike_smoothed``: the OASIS-deconvolved
+# estimate after the dataset's 15-frame (1.96-s) Gaussian smoothing. This
+# smoothed deconvolution-derived matrix, rather than the native unsmoothed
+# ``spike_deconv`` matrix, is the input used by Kiyooka et al.'s network
+# analyses. These are event proxies, not direct electrical spike measurements.
 #
-# The helpers below have deliberately narrow jobs:
-#
-# - `nested_random_neuron_samples` draws one unbiased random pool and returns
-#   nested prefixes, so every smaller example is contained in the larger ones.
-# - `trace_activity_view` packages one selected matrix with the timing and state
-#   metadata expected by the reusable plotting helpers.
-# - `make_trace_count_figure` creates one equal-sized trace/state figure. Keeping
-#   the size fixed makes the loss of readability at 500–1,000 neurons honest.
+# Both signals are only median-centered and vertically offset for display. They
+# keep their original time samples and amplitudes, and each signal has its own
+# vertical spacing and scale bar because their units differ. Change
+# `COMPARISON_NEURON_COUNT` or `COMPARISON_TIME_RANGE_MIN` in the settings to
+# choose another number of neurons or another start/end time. The default window
+# is the first five minutes.
+
 
 # %%
-def nested_random_neuron_samples(
-    n_neurons: int,
-    counts: tuple[int, ...],
-    seed: int,
-) -> dict[int, np.ndarray]:
-    """Return reproducible nested random samples without row-number bias."""
-    if not counts or any(count <= 0 for count in counts):
-        raise ValueError("TRACE_EXAMPLE_COUNTS must contain positive integers")
-    if len(set(counts)) != len(counts):
-        raise ValueError("TRACE_EXAMPLE_COUNTS must not contain duplicates")
-    if max(counts) > n_neurons:
-        raise ValueError(
-            f"Requested {max(counts):,} traces but the recording has only "
-            f"{n_neurons:,} neurons"
-        )
-    pool = np.random.default_rng(seed).choice(
-        n_neurons,
-        size=max(counts),
-        replace=False,
-    )
-    return {count: pool[:count].copy() for count in counts}
-
-
-def trace_activity_view(recording, neuron_ids: np.ndarray) -> dict[str, object]:
+def trace_activity_view(
+    recording,
+    neuron_ids: np.ndarray,
+    time_range_min: tuple[float, float] | None = None,
+) -> dict[str, object]:
     """Build the compact timing/state mapping used by stacked-trace plots."""
     duration_min = recording.n_frames / recording.fs / 60
     boundary_minutes = [
@@ -432,7 +412,7 @@ def trace_activity_view(recording, neuron_ids: np.ndarray) -> dict[str, object]:
         "n_frames": recording.n_frames,
         "fs": recording.fs,
         "duration_min": duration_min,
-        "time_limits_min": (0.0, duration_min),
+        "time_limits_min": viz.resolve_time_limits(duration_min, time_range_min),
         "state": recording.state,
         "codes": dict(dataio.state_codes(recording)),
         "trace_ids": neuron_ids,
@@ -445,71 +425,102 @@ def trace_activity_view(recording, neuron_ids: np.ndarray) -> dict[str, object]:
     }
 
 
-def make_trace_count_figure(
+def make_signal_comparison_figure(
     recording,
     neuron_ids: np.ndarray,
-    spacing: float,
+    time_range_min: tuple[float, float] | None = None,
 ):
-    """Plot one complete raw-trace example at a fixed 15 × 10 inch size."""
+    """Plot matching raw and network-input traces for selected neurons."""
+    view = trace_activity_view(recording, neuron_ids, time_range_min)
+    fig = plt.figure(figsize=(15, 12), constrained_layout=True)
+    grid = fig.add_gridspec(3, 1, height_ratios=(5, 5, 0.45))
+    dff_ax = fig.add_subplot(grid[0])
+    spike_ax = fig.add_subplot(grid[1], sharex=dff_ax)
+    state_ax = fig.add_subplot(grid[2], sharex=dff_ax)
+
+    viz.plot_stacked_dff(
+        dff_ax,
+        view,
+        line_width=0.45,
+        annotate_boundaries=False,
+    )
+    dff_ax.set_title("Top: raw fluorescence (ΔF/F; dFF)")
+
+    viz.plot_stacked_signal(
+        spike_ax,
+        view,
+        recording.spike_smoothed[neuron_ids],
+        signal_label="smoothed deconvolved activity",
+        scale_unit="deconvolution units",
+        line_width=0.45,
+        color="#8b1a1a",
+    )
+    spike_ax.set_title(
+        "Bottom: smoothed OASIS-deconvolved signal "
+        "(spike_smoothed; network-analysis input)"
+    )
+    viz.plot_state_strip(state_ax, view)
+    fig.suptitle(
+        f"{recording.name} · same random {neuron_ids.size} of "
+        f"{recording.n_neurons:,} neurons · {viz.time_window_label(view)}",
+        fontsize=15,
+    )
+    return fig
+
+
+comparison_neuron_ids = viz.select_trace_neurons(
+    rec.n_neurons,
+    COMPARISON_NEURON_COUNT,
+    TRACE_RANDOM_SEED,
+)
+comparison_figure = make_signal_comparison_figure(
+    rec,
+    comparison_neuron_ids,
+    COMPARISON_TIME_RANGE_MIN,
+)
+comparison_path = FIG_DIR / "00_inspect_signal_comparison.png"
+comparison_figure.savefig(comparison_path, dpi=160, bbox_inches="tight")
+plt.show()
+print("saved ->", comparison_path)
+
+# %% [markdown]
+# ## One configurable raw ΔF/F display
+#
+# This separate figure shows one random sample. The default is 100 neurons.
+# Change `DFF_NEURON_COUNT` in the settings to choose another count. As above,
+# the complete raw time sequence is retained: no smoothing, temporal
+# downsampling, clipping, or z-scoring is applied, and the state strip stays
+# aligned to the original frame labels.
+
+
+# %%
+def make_dff_figure(recording, neuron_ids: np.ndarray):
+    """Plot one complete raw ΔF/F example at a fixed 15 × 10 inch size."""
     view = trace_activity_view(recording, neuron_ids)
     fig = plt.figure(figsize=(15, 10), constrained_layout=True)
     grid = fig.add_gridspec(2, 1, height_ratios=(9, 0.48))
     trace_ax = fig.add_subplot(grid[0])
     state_ax = fig.add_subplot(grid[1], sharex=trace_ax)
     line_width = max(0.10, 0.35 * np.sqrt(100 / neuron_ids.size))
-    viz.plot_stacked_dff(
-        trace_ax,
-        view,
-        spacing=spacing,
-        line_width=line_width,
-    )
+    viz.plot_stacked_dff(trace_ax, view, line_width=line_width)
     viz.plot_state_strip(state_ax, view)
-    if neuron_ids.size == RECOMMENDED_TRACE_COUNT:
-        fig.suptitle(
-            "Recommended full-session raw-trace view "
-            f"({RECOMMENDED_TRACE_COUNT} neurons)",
-            fontsize=15,
-        )
-    else:
-        fig.suptitle("Raw ΔF/F trace readability comparison", fontsize=15)
+    fig.suptitle(
+        f"Full-session raw ΔF/F example ({neuron_ids.size} random neurons)",
+        fontsize=15,
+    )
     return fig
 
 
-trace_samples = nested_random_neuron_samples(
+dff_neuron_ids = viz.select_trace_neurons(
     rec.n_neurons,
-    TRACE_EXAMPLE_COUNTS,
+    DFF_NEURON_COUNT,
     TRACE_RANDOM_SEED,
 )
-
-# Use one amplitude spacing derived from the largest nested sample, so only the
-# number of rows—not the ΔF/F scale—changes across the comparison figures.
-largest_ids = trace_samples[max(TRACE_EXAMPLE_COUNTS)]
-largest_traces = rec.dFF[largest_ids]
-largest_centered = largest_traces - np.nanmedian(
-    largest_traces,
-    axis=1,
-    keepdims=True,
-)
-q01, q99 = np.nanpercentile(largest_centered, (1, 99))
-common_trace_spacing = 1.15 * (q99 - q01)
-if not np.isfinite(common_trace_spacing) or common_trace_spacing <= 0:
-    common_trace_spacing = 1.0
-del largest_centered, largest_traces
-
-for trace_count in TRACE_EXAMPLE_COUNTS:
-    trace_figure = make_trace_count_figure(
-        rec,
-        trace_samples[trace_count],
-        common_trace_spacing,
-    )
-    trace_path = FIG_DIR / f"00_inspect_dff_traces_{trace_count:04d}.png"
-    trace_figure.savefig(trace_path, dpi=160, bbox_inches="tight")
-    if trace_count == RECOMMENDED_TRACE_COUNT:
-        # Keep the original short filename as a convenient pointer to the
-        # recommended view while retaining every count-specific example.
-        trace_figure.savefig(FIG_DIR / "00_inspect_traces.png", dpi=160, bbox_inches="tight")
-    plt.show()
-    print("saved ->", trace_path)
+dff_figure = make_dff_figure(rec, dff_neuron_ids)
+dff_path = FIG_DIR / "00_inspect_traces.png"
+dff_figure.savefig(dff_path, dpi=160, bbox_inches="tight")
+plt.show()
+print("saved ->", dff_path)
 
 # %% [markdown]
 # ## Align every neuron with EEG, EMG, and brain state
@@ -722,13 +733,18 @@ print("saved compatibility copy ->", legacy_raster_path)
 # ## Spatial layout and cortical-region labels
 # Each neuron has both an (x, y) centroid in the 3 mm × 3 mm imaging field and a
 # row-aligned Allen-atlas acronym such as ``MOp2/3`` or ``SSp-bfd2/3``. The
-# recording targeted layer 2/3, so the shared ``2/3`` suffix is removed in the
-# legend. To match the compact reference figure, visual areas, the two minor SSp
+# recording targeted layer 2/3, so the shared ``2/3`` suffix is removed. The
+# legend shows each compact acronym alongside its unabridged Allen-area name. To
+# match the compact reference figure, visual areas, the two minor SSp
 # subdivisions, and ``root`` are grouped as ``Other``. A genuinely missing or
 # unassigned atlas label would instead appear as the distinct ``Unknown``
-# category. Every recorded neuron is still plotted—``nonzero_ROI`` is not
-# applied. The palette and label mapping live in the shared visualization module
-# so the spatial map and Rastermap row strip use exactly the same encoding.
+# category. Motor areas use greens, primary somatosensory subdivisions span
+# burnt orange, red, coral, pink, and magenta, retrosplenial areas use blues,
+# and grouped ``Other`` labels use gray. Yellow and yellow-green hues are
+# deliberately avoided for slide readability.
+# Every recorded neuron is still plotted—``nonzero_ROI`` is not applied. The
+# palette and label mapping live in the shared visualization module so the
+# spatial map and Rastermap row strip use exactly the same encoding.
 
 # %%
 if rec.atlas is None:
@@ -748,7 +764,7 @@ for region in region_order:
     print(f"  {region:<8} {np.count_nonzero(display_regions == region):5,d}")
 
 um = rec.centroid_um
-fig, ax = plt.subplots(figsize=(7.2, 6.2))
+fig, ax = plt.subplots(figsize=(10.5, 6.2))
 
 # Draw catch-all/missing groups first so named cortical areas remain crisp.
 background_regions = tuple(
@@ -779,7 +795,10 @@ ax.set_title(
     f"{rec.name} · all {rec.n_neurons:,} neurons by cortical region\n"
     "Allen atlas layer 2/3 labels"
 )
-legend_handles = viz.cortical_region_legend_handles(region_order)
+legend_handles = viz.cortical_region_legend_handles(
+    region_order,
+    unabridged=True,
+)
 legend = ax.legend(
     handles=legend_handles,
     loc="center left",

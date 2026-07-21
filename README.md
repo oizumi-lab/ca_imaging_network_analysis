@@ -36,17 +36,20 @@ Open the `scripts/*.py` files as **interactive `# %%` cell scripts** in VS Code
 (Python extension) or Spyder and run them cell by cell.
 
 `00_inspect_data.py` requires the full download: it builds the ten-session
-inventory, compares complete raw ΔF/F views containing 100–1,000 random neurons,
-plots every neuron alongside frame-trigger-synchronized EEG, EMG, and brain
-states, and maps all 7,843 neurons in `mouse01_sleep` by their row-aligned
-cortical atlas labels. The EEG/EMG panel additionally requires `--eeg-emg`.
-The 84 MB sample remains useful for the later quick validation exercises.
+inventory, compares raw ΔF/F with the smoothed deconvolved network-analysis
+signal for the same configurable random neurons and recorded-time window (10
+neurons and minutes 0–5 by default), and shows one configurable raw ΔF/F sample
+(100 neurons by default). It also plots every neuron alongside
+frame-trigger-synchronized EEG, EMG, and brain states, and maps all 7,843
+neurons in `mouse01_sleep` by their row-aligned cortical atlas labels. The
+EEG/EMG panel additionally requires `--eeg-emg`. The 84 MB sample remains useful
+for the later quick validation exercises.
 
 ## The hands-on, in order
 
 | Script | What you learn |
 |---|---|
-| `00_inspect_data.py` | Survey raw states; align all-neuron activity, EEG, and EMG; compare complete ΔF/F traces; and map neurons by cortical region |
+| `00_inspect_data.py` | Survey raw states; compare raw and deconvolution-derived signals; align all-neuron activity, EEG, and EMG; and map neurons by cortical region |
 | `01_reproduce_example.py` | Reproduce + validate the dataset's official example pipeline |
 | `02_visualization_activity.py` | ΔF/F, all-neuron reference rasters, and an active-neuron official Rastermap view over complete timelines |
 | `03_verify_rastermap.py` | Introduce the paper-style Rastermap workflow: active-neuron selection, normalization, PCA, sorting, and the final activity map |

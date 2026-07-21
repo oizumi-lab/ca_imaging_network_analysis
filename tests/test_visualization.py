@@ -48,6 +48,73 @@ class ViewSelectionTests(unittest.TestCase):
         self.assertEqual(viz.nice_scale_bar(0.08), 0.05)
         self.assertEqual(viz.nice_scale_bar(0.0), 1.0)
 
+    def test_stacked_signal_uses_supplied_roi_rows_and_units(self) -> None:
+        fig = Figure()
+        ax = fig.subplots()
+        signal = np.array([[0.0, 1.0, 0.0, 2.0], [0.0, 0.5, 0.0, 1.0]])
+        original = signal.copy()
+        view = {
+            "n_frames": 4,
+            "fs": 1.0,
+            "duration_min": 4 / 60,
+            "time_limits_min": (0.0, 4 / 60),
+            "state": np.zeros(4),
+            "codes": {0.0: "awake"},
+            "trace_ids": np.array([4, 9]),
+            "boundary_minutes": [],
+            "acquisition_segments": [(0, 4)],
+        }
+
+        viz.plot_stacked_signal(
+            ax,
+            view,
+            signal,
+            signal_label="smoothed deconvolved activity",
+            scale_unit="deconvolution units",
+        )
+
+        np.testing.assert_array_equal(signal, original)
+        self.assertEqual([tick.get_text() for tick in ax.get_yticklabels()], ["4", "9"])
+        self.assertEqual(
+            ax.get_ylabel(),
+            "neuron row (0-based)\n(smoothed deconvolved activity, offset)",
+        )
+        self.assertTrue(
+            any(text.get_text().endswith(" deconvolution units") for text in ax.texts)
+        )
+
+    def test_stacked_signal_requires_row_and_frame_alignment(self) -> None:
+        fig = Figure()
+        ax = fig.subplots()
+        view = {
+            "n_frames": 4,
+            "fs": 1.0,
+            "duration_min": 4 / 60,
+            "time_limits_min": (0.0, 4 / 60),
+            "state": np.zeros(4),
+            "codes": {0.0: "awake"},
+            "trace_ids": np.array([4, 9]),
+            "boundary_minutes": [],
+            "acquisition_segments": [(0, 4)],
+        }
+
+        with self.assertRaises(ValueError):
+            viz.plot_stacked_signal(
+                ax,
+                view,
+                np.zeros((1, 4)),
+                signal_label="signal",
+                scale_unit="units",
+            )
+        with self.assertRaises(ValueError):
+            viz.plot_stacked_signal(
+                ax,
+                view,
+                np.zeros((2, 3)),
+                signal_label="signal",
+                scale_unit="units",
+            )
+
     def test_rastermap_display_order_contains_every_neuron_once(self) -> None:
         order, n_fitted = viz.rastermap_display_order(
             n_neurons=7,
@@ -71,6 +138,25 @@ class ViewSelectionTests(unittest.TestCase):
 
 
 class CorticalRegionDisplayTests(unittest.TestCase):
+    def test_region_palette_groups_related_anatomical_areas(self) -> None:
+        expected_compact_palette = {
+            "MOs": "#005a32",
+            "MOp": "#41ab5d",
+            "SSp-ll": "#8c2d04",
+            "SSp-ul": "#e6550d",
+            "SSp-un": "#cb181d",
+            "SSp-bfd": "#fb6a4a",
+            "SSp-tr": "#f768a1",
+            "RSPagl": "#08306b",
+            "RSPd": "#2b8cbe",
+            "Other": "#666666",
+            "Unknown": "#bdbdbd",
+        }
+
+        self.assertEqual(viz.CORTICAL_REGION_COLORS, expected_compact_palette)
+        for region, color in expected_compact_palette.items():
+            self.assertEqual(viz.BRAIN_REGION_COLORS[region], color)
+
     def test_atlas_mapping_separates_other_from_unknown(self) -> None:
         atlas = np.array(
             ["MOs2/3", "RSPd", "VISp2/3", "root", "", None, "unknown"],
@@ -101,6 +187,25 @@ class CorticalRegionDisplayTests(unittest.TestCase):
                 viz.CORTICAL_REGION_COLORS["SSp-tr"],
                 viz.CORTICAL_REGION_COLORS["Other"],
                 viz.CORTICAL_REGION_COLORS["Unknown"],
+            ],
+        )
+
+    def test_region_legend_can_show_unabridged_area_names(self) -> None:
+        self.assertEqual(
+            set(viz.CORTICAL_REGION_NAMES),
+            set(viz.CORTICAL_REGION_COLORS),
+        )
+        handles = viz.cortical_region_legend_handles(
+            ["MOs", "SSp-bfd", "Other"],
+            unabridged=True,
+        )
+
+        self.assertEqual(
+            [handle.get_label() for handle in handles],
+            [
+                "MOs — Secondary motor area",
+                "SSp-bfd — Primary somatosensory area, barrel field",
+                "Other — Other atlas areas (grouped)",
             ],
         )
 

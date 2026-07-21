@@ -62,17 +62,38 @@ DEFAULT_SESSION_TITLES = {
 # distinction prevents missing metadata from silently becoming an anatomical
 # assignment.  Dictionary insertion order is also the stable legend order.
 CORTICAL_REGION_COLORS = {
-    "MOs": "#8d1b23",
-    "MOp": "#d24b45",
-    "SSp-ll": "#c8592b",
-    "SSp-ul": "#e4b345",
-    "SSp-un": "#78e25e",
-    "SSp-bfd": "#68b9e8",
-    "SSp-tr": "#3070b7",
-    "RSPagl": "#4949dd",
-    "RSPd": "#722f87",
-    "Other": "#a0a0a0",
-    "Unknown": "#252525",
+    # Motor areas: widely separated dark and medium greens.
+    "MOs": "#005a32",
+    "MOp": "#41ab5d",
+    # Primary somatosensory subdivisions: orange, red, coral, pink, magenta.
+    "SSp-ll": "#8c2d04",
+    "SSp-ul": "#e6550d",
+    "SSp-un": "#cb181d",
+    "SSp-bfd": "#fb6a4a",
+    "SSp-tr": "#f768a1",
+    # Retrosplenial areas: widely separated dark and medium blues.
+    "RSPagl": "#08306b",
+    "RSPd": "#2b8cbe",
+    # Grouped valid labels are gray; missing labels remain visibly distinct.
+    "Other": "#666666",
+    "Unknown": "#bdbdbd",
+}
+
+# Unabridged Allen-atlas names for the compact spatial-map categories.  Keeping
+# this separate from the color mapping lets dense row strips retain short
+# acronyms while explanatory figure legends can show both forms.
+CORTICAL_REGION_NAMES = {
+    "MOs": "Secondary motor area",
+    "MOp": "Primary motor area",
+    "SSp-ll": "Primary somatosensory area, lower limb",
+    "SSp-ul": "Primary somatosensory area, upper limb",
+    "SSp-un": "Primary somatosensory area, unassigned",
+    "SSp-bfd": "Primary somatosensory area, barrel field",
+    "SSp-tr": "Primary somatosensory area, trunk",
+    "RSPagl": "Retrosplenial area, lateral agranular part",
+    "RSPd": "Retrosplenial area, dorsal part",
+    "Other": "Other atlas areas (grouped)",
+    "Unknown": "Missing or unassigned atlas label",
 }
 
 # Exact atlas regions present in the activity dataset. Unlike the compact
@@ -80,25 +101,29 @@ CORTICAL_REGION_COLORS = {
 # acronyms separate so a brain-region-grouped raster has one block per supplied
 # anatomical label. Dictionary insertion order is the stable display order.
 BRAIN_REGION_COLORS = {
-    "MOs": "#8d1b23",
-    "MOp": "#d24b45",
-    "SSp-ll": "#c8592b",
-    "SSp-ul": "#e4b345",
-    "SSp-un": "#78e25e",
-    "SSp-bfd": "#68b9e8",
-    "SSp-tr": "#3070b7",
-    "SSp-m": "#2ca25f",
-    "SSp-n": "#99d8c9",
-    "RSPagl": "#4949dd",
-    "RSPd": "#722f87",
-    "VISa": "#e377c2",
-    "VISam": "#f7b6d2",
-    "VISp": "#8c564b",
-    "VISpm": "#c49c94",
-    "VISrl": "#bcbd22",
-    "root": "#a0a0a0",
-    "Other": "#d0d0d0",
-    "Unknown": "#252525",
+    # Motor areas: widely separated dark and medium greens.
+    "MOs": "#005a32",
+    "MOp": "#41ab5d",
+    # Primary somatosensory subdivisions: orange through red, pink, and magenta.
+    "SSp-ll": "#8c2d04",
+    "SSp-ul": "#e6550d",
+    "SSp-un": "#cb181d",
+    "SSp-bfd": "#fb6a4a",
+    "SSp-tr": "#f768a1",
+    "SSp-m": "#c51b8a",
+    "SSp-n": "#7a0177",
+    # Retrosplenial areas: widely separated dark and medium blues.
+    "RSPagl": "#08306b",
+    "RSPd": "#2b8cbe",
+    # Exact visual-area categories remain distinguishable in purples.
+    "VISa": "#3f007d",
+    "VISam": "#54278f",
+    "VISp": "#6a51a3",
+    "VISpm": "#807dba",
+    "VISrl": "#9e9ac8",
+    "root": "#4d4d4d",
+    "Other": "#666666",
+    "Unknown": "#bdbdbd",
 }
 
 
@@ -195,12 +220,15 @@ def brain_region_order(
 
 def cortical_region_legend_handles(
     regions: Sequence[str] | np.ndarray | None = None,
+    *,
+    unabridged: bool = False,
 ) -> list[Line2D]:
     """Build stable, point-style legend handles for cortical categories.
 
     Passing ``regions`` restricts the legend to categories actually present,
     while retaining the shared anatomical order.  ``None`` requests every
-    category, including the distinct ``Other`` and ``Unknown`` entries.
+    category, including the distinct ``Other`` and ``Unknown`` entries. Set
+    ``unabridged`` to show each acronym together with its full atlas-area name.
     """
     if regions is None:
         shown = set(CORTICAL_REGION_COLORS)
@@ -221,7 +249,11 @@ def cortical_region_legend_handles(
             markersize=5,
             markerfacecolor=color,
             markeredgewidth=0,
-            label=region,
+            label=(
+                f"{region} — {CORTICAL_REGION_NAMES[region]}"
+                if unabridged
+                else region
+            ),
         )
         for region, color in CORTICAL_REGION_COLORS.items()
         if region in shown
@@ -818,25 +850,51 @@ def visible_frame_range(view: ActivityView) -> tuple[int, int]:
     return start, stop
 
 
-def plot_stacked_dff(
+def plot_stacked_signal(
     ax,
     view: ActivityView,
-    session_titles: Mapping[str, str] | None = None,
+    signal: np.ndarray,
+    *,
+    signal_label: str,
+    scale_unit: str,
     spacing: float | None = None,
     line_width: float = 0.27,
+    color: Any = "0.08",
+    annotate_boundaries: bool = True,
 ) -> None:
-    """Plot raw, median-centered ΔF/F traces with common vertical spacing.
+    """Plot row-aligned, median-centered signals with common vertical spacing.
 
-    ``spacing`` can be shared by several figures when comparing different
-    neuron counts. It translates traces vertically but never rescales their
-    amplitudes. ``line_width`` controls rendering only.
+    The function is signal-agnostic so the same selected neuron rows can be
+    compared without changing their order. ``spacing`` translates traces
+    vertically but never rescales their amplitudes; signals with different
+    units should therefore use separate spacing values and scale bars.
     """
-    titles = DEFAULT_SESSION_TITLES if session_titles is None else session_titles
+    signal = np.asarray(signal)
+    trace_ids = view["trace_ids"]
+    if signal.ndim != 2:
+        raise ValueError("signal must be a neuron-by-frame matrix")
+    if trace_ids is None:
+        raise ValueError("trace_ids are required for a stacked-signal plot")
+    trace_ids = np.asarray(trace_ids)
+    if trace_ids.ndim != 1 or trace_ids.size != signal.shape[0]:
+        raise ValueError("trace_ids must contain one row ID per signal trace")
+    if signal.shape[0] == 0:
+        raise ValueError("signal must contain at least one neuron")
+    if signal.shape[1] != view["n_frames"]:
+        raise ValueError("signal frame count must match the activity view")
+
     time_min = np.arange(view["n_frames"]) / view["fs"] / 60
-    centered = view["dff"] - np.nanmedian(view["dff"], axis=1, keepdims=True)
+    centered = signal - np.nanmedian(signal, axis=1, keepdims=True)
     if spacing is None:
         q01, q99 = np.nanpercentile(centered, (1, 99))
         robust_range = q99 - q01
+        if not np.isfinite(robust_range) or robust_range <= 0:
+            finite_nonzero = np.abs(centered[np.isfinite(centered) & (centered != 0)])
+            robust_range = (
+                float(np.nanpercentile(finite_nonzero, 99))
+                if finite_nonzero.size
+                else 0.0
+            )
         spacing = (
             1.15 * robust_range
             if np.isfinite(robust_range) and robust_range > 0
@@ -846,7 +904,7 @@ def plot_stacked_dff(
         raise ValueError("spacing must be finite and positive")
     if not np.isfinite(line_width) or line_width <= 0:
         raise ValueError("line_width must be finite and positive")
-    # Negative offsets put the first neuron at the top while positive calcium
+    # Negative offsets put the first neuron at the top while positive signal
     # transients continue to point upward on the page.
     offsets = -np.arange(centered.shape[0]) * spacing
     visible_start, visible_stop = visible_frame_range(view)
@@ -861,7 +919,7 @@ def plot_stacked_dff(
             ax.plot(
                 time_min[start:stop],
                 trace[start:stop] + offset,
-                color="0.08",
+                color=color,
                 lw=line_width,
                 rasterized=True,
                 zorder=2,
@@ -871,15 +929,10 @@ def plot_stacked_dff(
         np.linspace(0, centered.shape[0] - 1, min(11, centered.shape[0])).astype(int)
     )
     ax.set_yticks(offsets[tick_rows])
-    ax.set_yticklabels(view["trace_ids"][tick_rows], fontsize=7)
+    ax.set_yticklabels(trace_ids[tick_rows], fontsize=7)
     ax.set_ylim(offsets[-1] - spacing, spacing)
     ax.set_xlim(*view["time_limits_min"])
-    ax.set_ylabel("neuron row (0-based)\n(raw ΔF/F, offset)")
-    ax.set_title(
-        f"{view['name']} · {titles[view['data_info']]}\n"
-        f"random {centered.shape[0]} of {view['n_neurons']:,} neurons · "
-        f"{time_window_label(view)}"
-    )
+    ax.set_ylabel(f"neuron row (0-based)\n({signal_label}, offset)")
     ax.tick_params(axis="x", labelbottom=False)
 
     scale = nice_scale_bar(0.6 * spacing)
@@ -894,17 +947,44 @@ def plot_stacked_dff(
         clip_on=False,
         zorder=4,
     )
-    mark_acquisition_boundaries(ax, view, annotate=True)
+    mark_acquisition_boundaries(ax, view, annotate=annotate_boundaries)
     ax.text(
         0.975,
         y0 + scale / 2,
-        f"{scale:g} ΔF/F",
+        f"{scale:g} {scale_unit}",
         ha="right",
         va="center",
         fontsize=8,
         transform=transform,
         bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.75, "pad": 1},
         zorder=4,
+    )
+
+
+def plot_stacked_dff(
+    ax,
+    view: ActivityView,
+    session_titles: Mapping[str, str] | None = None,
+    spacing: float | None = None,
+    line_width: float = 0.27,
+    annotate_boundaries: bool = True,
+) -> None:
+    """Plot raw, median-centered ΔF/F traces with common vertical spacing."""
+    titles = DEFAULT_SESSION_TITLES if session_titles is None else session_titles
+    plot_stacked_signal(
+        ax,
+        view,
+        view["dff"],
+        signal_label="raw ΔF/F",
+        scale_unit="ΔF/F",
+        spacing=spacing,
+        line_width=line_width,
+        annotate_boundaries=annotate_boundaries,
+    )
+    ax.set_title(
+        f"{view['name']} · {titles[view['data_info']]}\n"
+        f"random {np.asarray(view['dff']).shape[0]} of "
+        f"{view['n_neurons']:,} neurons · {time_window_label(view)}"
     )
 
 
@@ -1341,6 +1421,7 @@ def plot_spatial_modules(
 __all__ = [
     "ActivityView",
     "CORTICAL_REGION_COLORS",
+    "CORTICAL_REGION_NAMES",
     "DEFAULT_SESSION_TITLES",
     "DEFAULT_STATE_COLORS",
     "DEFAULT_STATE_LABELS",
@@ -1368,6 +1449,7 @@ __all__ = [
     "plot_spatial_modules",
     "plot_spike_raster",
     "plot_stacked_dff",
+    "plot_stacked_signal",
     "plot_state_strip",
     "rastermap_display_order",
     "resolve_time_limits",
