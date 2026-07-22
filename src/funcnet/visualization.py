@@ -54,34 +54,43 @@ DEFAULT_SESSION_TITLES = {
     "ane": "Anesthesia recording: awake and isoflurane anesthesia",
 }
 
-# Compact cortical-area categories used by the spatial inspection map,
-# brain-region activity raster, and row-aligned Rastermap diagnostics. ``Other``
-# means that the source contains a valid Allen-atlas acronym outside the nine
-# prominently displayed regions;
-# ``Unknown`` is reserved for a genuinely missing/unassigned source label.  The
-# distinction prevents missing metadata from silently becoming an anatomical
-# assignment.  Dictionary insertion order is also the stable legend order.
+# Exact layer-collapsed Allen-atlas categories found across the ten recordings.
+# Related anatomical families occupy neighboring hues: motor greens,
+# somatosensory warm colors, retrosplenial blues, and visual purples. ``root``
+# in the source is the Allen ontology root rather than a specific cortical area,
+# so it maps to the explicit gray ``Unassigned`` category. ``Other`` is reserved
+# for an unexpected but non-missing atlas acronym, and ``Unknown`` for absent
+# metadata. Dictionary insertion order supplies both family grouping and the
+# stable display/legend order shared by every anatomical plot.
 CORTICAL_REGION_COLORS = {
-    # Motor areas: widely separated dark and medium greens.
+    # Motor family.
     "MOs": "#005a32",
     "MOp": "#41ab5d",
-    # Primary somatosensory subdivisions: orange, red, coral, pink, magenta.
+    # Primary somatosensory family.
     "SSp-ll": "#8c2d04",
     "SSp-ul": "#e6550d",
     "SSp-un": "#cb181d",
     "SSp-bfd": "#fb6a4a",
     "SSp-tr": "#f768a1",
-    # Retrosplenial areas: widely separated dark and medium blues.
+    "SSp-m": "#dd3497",
+    "SSp-n": "#ae017e",
+    # Retrosplenial family.
     "RSPagl": "#08306b",
     "RSPd": "#2b8cbe",
-    # Grouped valid labels are gray; missing labels remain visibly distinct.
+    # Visual family.
+    "VISa": "#3f007d",
+    "VISam": "#54278f",
+    "VISp": "#6a51a3",
+    "VISpm": "#807dba",
+    "VISrl": "#9e9ac8",
+    # Non-area/fallback categories.
+    "Unassigned": "#737373",
     "Other": "#666666",
     "Unknown": "#bdbdbd",
 }
 
-# Unabridged Allen-atlas names for the compact spatial-map categories.  Keeping
-# this separate from the color mapping lets dense row strips retain short
-# acronyms while explanatory figure legends can show both forms.
+# Unabridged names let dense row strips retain acronyms while explanatory maps
+# can state the corresponding Allen-area name.
 CORTICAL_REGION_NAMES = {
     "MOs": "Secondary motor area",
     "MOp": "Primary motor area",
@@ -90,66 +99,77 @@ CORTICAL_REGION_NAMES = {
     "SSp-un": "Primary somatosensory area, unassigned",
     "SSp-bfd": "Primary somatosensory area, barrel field",
     "SSp-tr": "Primary somatosensory area, trunk",
+    "SSp-m": "Primary somatosensory area, mouth",
+    "SSp-n": "Primary somatosensory area, nose",
     "RSPagl": "Retrosplenial area, lateral agranular part",
     "RSPd": "Retrosplenial area, dorsal part",
-    "Other": "Other atlas areas (grouped)",
-    "Unknown": "Missing or unassigned atlas label",
+    "VISa": "Anterior visual area",
+    "VISam": "Anteromedial visual area",
+    "VISp": "Primary visual area",
+    "VISpm": "Posteromedial visual area",
+    "VISrl": "Rostrolateral visual area",
+    "Unassigned": "Atlas root (no specific cortical-area assignment)",
+    "Other": "Other valid atlas area",
+    "Unknown": "Missing atlas label",
 }
 
-# Exact atlas regions present in the activity dataset. Unlike the compact
-# cortical map above, this palette keeps the visual and minor somatosensory
-# acronyms separate so a brain-region-grouped raster has one block per supplied
-# anatomical label. Dictionary insertion order is the stable display order.
-BRAIN_REGION_COLORS = {
-    # Motor areas: widely separated dark and medium greens.
-    "MOs": "#005a32",
-    "MOp": "#41ab5d",
-    # Primary somatosensory subdivisions: orange through red, pink, and magenta.
-    "SSp-ll": "#8c2d04",
-    "SSp-ul": "#e6550d",
-    "SSp-un": "#cb181d",
-    "SSp-bfd": "#fb6a4a",
-    "SSp-tr": "#f768a1",
-    "SSp-m": "#c51b8a",
-    "SSp-n": "#7a0177",
-    # Retrosplenial areas: widely separated dark and medium blues.
-    "RSPagl": "#08306b",
-    "RSPd": "#2b8cbe",
-    # Exact visual-area categories remain distinguishable in purples.
-    "VISa": "#3f007d",
-    "VISam": "#54278f",
-    "VISp": "#6a51a3",
-    "VISpm": "#807dba",
-    "VISrl": "#9e9ac8",
-    "root": "#4d4d4d",
-    "Other": "#666666",
-    "Unknown": "#bdbdbd",
+# Region families are explicit metadata rather than something inferred from a
+# color string. They support cohort inventories and future grouped legends.
+BRAIN_REGION_FAMILIES = {
+    **{name: "Motor" for name in ("MOs", "MOp")},
+    **{
+        name: "Somatosensory"
+        for name in (
+            "SSp-ll",
+            "SSp-ul",
+            "SSp-un",
+            "SSp-bfd",
+            "SSp-tr",
+            "SSp-m",
+            "SSp-n",
+        )
+    },
+    **{name: "Retrosplenial" for name in ("RSPagl", "RSPd")},
+    **{name: "Visual" for name in ("VISa", "VISam", "VISp", "VISpm", "VISrl")},
+    "Unassigned": "Unassigned",
+    "Other": "Other",
+    "Unknown": "Unknown",
 }
+BRAIN_REGION_COLORS = dict(CORTICAL_REGION_COLORS)
+BRAIN_REGION_NAMES = dict(CORTICAL_REGION_NAMES)
 
 
 def display_cortical_region(atlas_label: object) -> str:
-    """Map one exact atlas label to a compact display category.
+    """Map one source atlas label to an exact layer-collapsed display category.
 
     The recordings target layer 2/3, so a terminal ``2/3`` suffix is removed.
-    Valid but less common atlas acronyms are grouped into ``Other``.  Empty and
-    conventional missing-value strings remain separately visible as
-    ``Unknown`` rather than being assigned to an anatomical catch-all.
+    Source ``root`` labels become ``Unassigned`` because they identify no
+    specific cortical area. Unrecognized valid acronyms become ``Other``;
+    absent values remain separately visible as ``Unknown``.
     """
     if atlas_label is None:
         return "Unknown"
     if isinstance(atlas_label, bytes):
         atlas_label = atlas_label.decode("utf-8", errors="replace")
     text = str(atlas_label).strip()
+    if text in {"Unassigned", "Other", "Unknown"}:
+        return text
     if text.casefold() in {"", "nan", "none", "unknown", "unassigned", "na", "n/a"}:
         return "Unknown"
     area = text.removesuffix("2/3")
-    if area in CORTICAL_REGION_COLORS and area not in {"Other", "Unknown"}:
+    if area.casefold() == "root":
+        return "Unassigned"
+    if area in CORTICAL_REGION_COLORS and area not in {
+        "Unassigned",
+        "Other",
+        "Unknown",
+    }:
         return area
     return "Other"
 
 
 def cortical_region_labels(atlas_labels: Sequence[object] | np.ndarray) -> np.ndarray:
-    """Return one compact cortical-region category per original ROI row."""
+    """Return one exact displayed cortical-region category per original ROI."""
     atlas = np.asarray(atlas_labels, dtype=object)
     if atlas.ndim != 1:
         raise ValueError("atlas_labels must be a one-dimensional ROI-aligned array")
@@ -160,17 +180,7 @@ def cortical_region_labels(atlas_labels: Sequence[object] | np.ndarray) -> np.nd
 
 def display_brain_region(atlas_label: object) -> str:
     """Return one exact layer-collapsed atlas region for the activity raster."""
-    if atlas_label is None:
-        return "Unknown"
-    if isinstance(atlas_label, bytes):
-        atlas_label = atlas_label.decode("utf-8", errors="replace")
-    text = str(atlas_label).strip()
-    if text.casefold() in {"", "nan", "none", "unknown", "unassigned", "na", "n/a"}:
-        return "Unknown"
-    region = text.removesuffix("2/3")
-    if region in BRAIN_REGION_COLORS and region not in {"Other", "Unknown"}:
-        return region
-    return "Other"
+    return display_cortical_region(atlas_label)
 
 
 def brain_region_labels(atlas_labels: Sequence[object] | np.ndarray) -> np.ndarray:
@@ -1432,6 +1442,8 @@ __all__ = [
     "cortical_region_labels",
     "cortical_region_legend_handles",
     "BRAIN_REGION_COLORS",
+    "BRAIN_REGION_FAMILIES",
+    "BRAIN_REGION_NAMES",
     "brain_region_labels",
     "brain_region_legend_handles",
     "brain_region_order",

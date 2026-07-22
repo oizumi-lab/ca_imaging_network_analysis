@@ -139,7 +139,7 @@ class ViewSelectionTests(unittest.TestCase):
 
 class CorticalRegionDisplayTests(unittest.TestCase):
     def test_region_palette_groups_related_anatomical_areas(self) -> None:
-        expected_compact_palette = {
+        expected_palette = {
             "MOs": "#005a32",
             "MOp": "#41ab5d",
             "SSp-ll": "#8c2d04",
@@ -147,15 +147,32 @@ class CorticalRegionDisplayTests(unittest.TestCase):
             "SSp-un": "#cb181d",
             "SSp-bfd": "#fb6a4a",
             "SSp-tr": "#f768a1",
+            "SSp-m": "#dd3497",
+            "SSp-n": "#ae017e",
             "RSPagl": "#08306b",
             "RSPd": "#2b8cbe",
+            "VISa": "#3f007d",
+            "VISam": "#54278f",
+            "VISp": "#6a51a3",
+            "VISpm": "#807dba",
+            "VISrl": "#9e9ac8",
+            "Unassigned": "#737373",
             "Other": "#666666",
             "Unknown": "#bdbdbd",
         }
 
-        self.assertEqual(viz.CORTICAL_REGION_COLORS, expected_compact_palette)
-        for region, color in expected_compact_palette.items():
-            self.assertEqual(viz.BRAIN_REGION_COLORS[region], color)
+        self.assertEqual(viz.CORTICAL_REGION_COLORS, expected_palette)
+        self.assertEqual(viz.BRAIN_REGION_COLORS, expected_palette)
+        self.assertEqual(
+            [viz.BRAIN_REGION_FAMILIES[name] for name in ("MOs", "MOp")],
+            ["Motor", "Motor"],
+        )
+        self.assertTrue(
+            all(
+                viz.BRAIN_REGION_FAMILIES[name] == "Visual"
+                for name in ("VISa", "VISam", "VISp", "VISpm", "VISrl")
+            )
+        )
 
     def test_atlas_mapping_separates_other_from_unknown(self) -> None:
         atlas = np.array(
@@ -165,7 +182,15 @@ class CorticalRegionDisplayTests(unittest.TestCase):
 
         np.testing.assert_array_equal(
             viz.cortical_region_labels(atlas),
-            ["MOs", "RSPd", "Other", "Other", "Unknown", "Unknown", "Unknown"],
+            [
+                "MOs",
+                "RSPd",
+                "VISp",
+                "Unassigned",
+                "Unknown",
+                "Unknown",
+                "Unknown",
+            ],
         )
         self.assertNotEqual(
             viz.CORTICAL_REGION_COLORS["Other"],
@@ -205,7 +230,7 @@ class CorticalRegionDisplayTests(unittest.TestCase):
             [
                 "MOs — Secondary motor area",
                 "SSp-bfd — Primary somatosensory area, barrel field",
-                "Other — Other atlas areas (grouped)",
+                "Other — Other valid atlas area",
             ],
         )
 
@@ -217,11 +242,23 @@ class CorticalRegionDisplayTests(unittest.TestCase):
 
         np.testing.assert_array_equal(
             viz.brain_region_labels(atlas),
-            ["VISp", "SSp-m", "root", "Other", "Unknown", "Unknown"],
+            ["VISp", "SSp-m", "Unassigned", "Other", "Unknown", "Unknown"],
         )
         self.assertNotEqual(
             viz.BRAIN_REGION_COLORS["VISp"],
             viz.BRAIN_REGION_COLORS["SSp-m"],
+        )
+
+    def test_display_region_mapping_is_idempotent(self) -> None:
+        atlas = np.array(
+            ["VISp2/3", "root", "LP2/3", "", None],
+            dtype=object,
+        )
+        displayed = viz.brain_region_labels(atlas)
+
+        np.testing.assert_array_equal(
+            viz.brain_region_labels(displayed),
+            displayed,
         )
 
     def test_brain_region_order_preserves_activity_rank_within_regions(self) -> None:
@@ -268,14 +305,14 @@ class CorticalRegionDisplayTests(unittest.TestCase):
             [
                 color_index["RSPd"],
                 color_index["MOs"],
-                color_index["Other"],
+                color_index["VISp"],
                 color_index["Unknown"],
             ],
         )
         self.assertEqual(np.asarray(image.get_array()).shape, (4, 1))
         self.assertEqual(
             [handle.get_label() for handle in handles],
-            ["MOs", "RSPd", "Other", "Unknown"],
+            ["MOs", "RSPd", "VISp", "Unknown"],
         )
         self.assertEqual(len(ax.lines), 1)
         np.testing.assert_allclose(ax.lines[0].get_ydata(), [2.5, 2.5])

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 
+import h5py
 import numpy as np
 
 from src.funcnet import dataio
@@ -67,6 +70,29 @@ class AtlasStringDecodingTests(unittest.TestCase):
             dataio._decode_mcos_string_payload(malformed, expected_count=2)
         with self.assertRaises(ValueError):
             dataio._decode_mcos_string_payload(payload[:-1], expected_count=2)
+
+    def test_lightweight_atlas_loader_avoids_activity_matrices(self) -> None:
+        labels = ["MOs2/3", "VISa2/3", "root"]
+        with TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "atlas_only.mat"
+            with h5py.File(path, "w") as mat:
+                mat.create_dataset("nonzero_ROI", data=np.ones(len(labels)))
+                rois = mat.create_group("ROIs")
+                atlas = rois.create_dataset("atlas", data=np.zeros(1, dtype=np.uint8))
+                atlas.attrs["MATLAB_class"] = np.bytes_("string")
+                subsystem = mat.create_group("#subsystem#")
+                payload = mat.create_dataset(
+                    "atlas_payload",
+                    data=packed_string_payload(labels),
+                )
+                references = subsystem.create_dataset(
+                    "MCOS",
+                    shape=(1,),
+                    dtype=h5py.ref_dtype,
+                )
+                references[0] = payload.ref
+
+            self.assertEqual(dataio.load_atlas_labels(path), labels)
 
 
 class StateCodeTests(unittest.TestCase):

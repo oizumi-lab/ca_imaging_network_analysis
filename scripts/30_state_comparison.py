@@ -16,12 +16,12 @@
 # 20), take the **max-Q** Louvain partition, and compare states across a range of
 # densities.
 #
-# **This script produces the talk figure** (`20260730_Neuro2026_Talk` ·
-# "Modularity (Functional segregation)"): a **per-mouse scatter** of the number
-# of modules and of modularity Q, Wakefulness vs NREM (and Wakefulness vs
-# anesthesia), with an "Average" column joining each mouse's two states. A second
-# figure shows the same result as mean±SE curves **vs connection density**, to
-# make the "robust across densities" point explicit.
+# **This script produces the talk-style comparison figure**: one modularity-Q
+# dot per complete time window for each recording, separately for Wakefulness vs
+# NREM and Wakefulness vs anesthesia. The "Average" column contains one pair of
+# window-averaged values per recording, joined across states. A second figure
+# shows the same result as mean±SE curves **vs connection density**, to make the
+# "robust across densities" point explicit.
 
 # %%
 import os
@@ -51,11 +51,13 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # absolute Q values and the estimated state contrast, so treat the defaults as a
 # teaching-sized descriptive run.
 #
-# Each small **dot** in the per-mouse scatter is one descriptive estimate: a
-# (window × density) pair. These dots show sensitivity to analysis choices;
-# they are **not independent replicates**. State effects and error bars below
-# are summarized at the biological-mouse level after averaging windows (and,
-# for sleep mouse 4, its two recording days).
+# Each small **dot** in the first comparison figures is one complete time-window
+# estimate at ``REF_DENSITY``. All available complete windows are shown; they
+# are repeated observations within a recording, **not independent biological
+# replicates**. The later density curves remain deliberately lightweight by
+# using at most ``DENSITY_CURVE_WINDOWS`` windows per state. State effects and
+# error bars below are summarized at the biological-mouse level after averaging
+# windows (and, for sleep mouse 4, its two recording days).
 # Fixed graph density does not equalize temporal firing sparsity. See
 # ``verification/52_sparse_firing_robustness.py`` for state-specific temporal-null
 # and common-active sensitivity checks.
@@ -63,10 +65,10 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # %%
 SLEEP_WINDOW = 1500
 ANE_WINDOW = 2900
-DENSITIES = [0.02, 0.03, 0.05, 0.08, 0.10]   # scatter dots + curve x-axis
+DENSITIES = [0.02, 0.03, 0.05, 0.08, 0.10]   # density-robustness curve x-axis
 REF_DENSITY = 0.05  # reference density for the numeric summary at the end
 N_RUNS = 5          # Louvain runs per window/density (paper: ~200)
-N_WINDOWS = 2       # windows per state (more = more dots / smoother estimates)
+DENSITY_CURVE_WINDOWS = 2  # per state; the fixed-density scatter uses all windows
 GAMMA = 1.0
 MAX_NEURONS = 3000  # random subsample for speed; set None to use all (like the paper)
 
@@ -91,7 +93,24 @@ ANE_MOUSE_GROUPS = [
     ("Mouse4", ("mouse07_ane",)),
 ]
 
-MEASURE_LABELS = {"Q": "Modularity  Q", "nmod": "# of Modules"}
+# Display every recording separately in the fixed-density window figures. The
+# two Mouse4 sleep days are separate dataset columns, matching the attached
+# figure; they are pooled only in the later biological-mouse summaries.
+SLEEP_RECORDING_COLUMNS = [
+    ("Mouse1", "mouse01_sleep"),
+    ("Mouse2", "mouse02_sleep"),
+    ("Mouse3", "mouse03_sleep"),
+    ("Mouse4\n(day1)", "mouse04_day1_sleep"),
+    ("Mouse4\n(day2)", "mouse04_day2_sleep"),
+    ("Mouse5", "mouse05_sleep"),
+]
+ANE_RECORDING_COLUMNS = [
+    ("Mouse1", "mouse03_ane"),
+    ("Mouse2", "mouse05_ane"),
+    ("Mouse3", "mouse06_ane"),
+    ("Mouse4", "mouse07_ane"),
+]
+
 UNCONSCIOUS_COLOR = {"nrem": "crimson", "anesthesia": "goldenrod"}
 
 
@@ -99,19 +118,27 @@ UNCONSCIOUS_COLOR = {"nrem": "crimson", "anesthesia": "goldenrod"}
 def state_measures(rec, label, rows, width):
     """max-Q and module count per (window, density) for one state.
 
-    Returns ``{K: {"Q": [...], "nmod": [...]}}`` with one entry per window.
+    Every complete window is evaluated at ``REF_DENSITY`` for the per-window
+    scatter. To keep the density sweep tractable, only the first
+    ``DENSITY_CURVE_WINDOWS`` windows are evaluated at the other densities.
     """
     out = {K: {"Q": [], "nmod": []} for K in DENSITIES}
     windows = ts.frame_windows(
         dataio.state_frames(rec, label),
         width,
-        max_windows=N_WINDOWS,
+        max_windows=None,
     )
-    for win in windows:
+    print(f"    {len(windows)} complete {width}-frame windows", flush=True)
+    for window_index, win in enumerate(windows):
         # Correlation is shared across densities; compute this quadratic matrix
         # only once per window, then vary the threshold below.
         C = net.correlation_matrix(rec.spike_smoothed[np.ix_(rows, win)])
-        for K in DENSITIES:
+        window_densities = (
+            DENSITIES
+            if window_index < DENSITY_CURVE_WINDOWS
+            else (REF_DENSITY,)
+        )
+        for K in window_densities:
             adj, _ = net.density_threshold(C, K, negative=True)  # rank by |r|
             r = net.repeat_louvain(adj, gamma=GAMMA, n_runs=N_RUNS)
             out[K]["Q"].append(r["Q_max"])
@@ -147,85 +174,135 @@ ane_data = dataset_measures(ANE_RECS, ANE_WINDOW)
 
 
 # %% [markdown]
-# ## Figure 1 — per-mouse scatter (reproduces the talk slide)
-# For every biological mouse, each state's small dots show all window/density
-# estimates. The gray **Average** column shows one hierarchical mean per mouse,
-# joined awake → unconscious. Mouse 4's two sleep days are first averaged
-# separately and then combined, so each biological mouse has equal weight.
+# ## Figure 1 — one modularity value per time window
+# Each recording has one vertical column. Every small point is max-Q from one
+# complete state-specific window at the same fixed density, ``REF_DENSITY``.
+# The **Average** column contains one point per recording and state (the mean of
+# that recording's windows), with a line joining Awake to NREM/Anesthesia. Sleep
+# Mouse4 day1 and day2 remain separate here because they are separate datasets.
+# They are combined only for the later biological-mouse summary.
 
 # %%
-def pool(rec_states, state, measure):
-    """Flat list over (window, density), used only for descriptive dots."""
-    vals = []
-    for K in DENSITIES:
-        vals.extend(rec_states[state][K][measure])
-    return np.asarray(vals, dtype=float)
-
-
-def recording_summary(rec_states, state, measure, density=None):
+def recording_summary(rec_states, state, measure, density=None, max_windows=None):
     """Mean over windows, optionally after also averaging across densities."""
     densities = DENSITIES if density is None else [density]
-    vals = [np.mean(rec_states[state][K][measure]) for K in densities]
+    vals = []
+    for K in densities:
+        window_values = rec_states[state][K][measure]
+        if max_windows is not None:
+            window_values = window_values[:max_windows]
+        vals.append(np.mean(window_values))
     return float(np.mean(vals))
 
 
-def mouse_summary(data, rec_names, state, measure, density=None):
+def mouse_summary(data, rec_names, state, measure, density=None, max_windows=None):
     """Equal-weight mean of recording/day summaries for one biological mouse."""
-    vals = [recording_summary(data[name], state, measure, density) for name in rec_names]
+    vals = [
+        recording_summary(
+            data[name],
+            state,
+            measure,
+            density,
+            max_windows=max_windows,
+        )
+        for name in rec_names
+    ]
     return float(np.mean(vals))
 
 
-def scatter_by_mouse(ax, data, mouse_groups, measure, unconscious_state):
-    """Per-mouse scatter of a measure, awake vs one unconscious state.
-
-    Each biological mouse is a column; the final column is the across-mouse
-    "Average" (per-mouse means, awake and unconscious joined by a line).
-    """
-    jitter = np.random.RandomState(0)
+def window_comparison_figure(data, recording_columns, unconscious_state, title):
+    """Plot one Q point per window and one paired mean per recording."""
+    fig, ax = plt.subplots(figsize=(8.2, 4.8))
     color_un = UNCONSCIOUS_COLOR[unconscious_state]
-    aw_means, un_means = [], []
-    for x, (_, rec_names) in enumerate(mouse_groups):
-        aw = np.concatenate([pool(data[name], "awake", measure) for name in rec_names])
-        un = np.concatenate([pool(data[name], unconscious_state, measure) for name in rec_names])
-        ax.scatter(x + jitter.uniform(-.09, .09, aw.size), aw, s=16,
-                   color="royalblue", zorder=3, label="Wakefulness" if x == 0 else None)
-        ax.scatter(x + jitter.uniform(-.09, .09, un.size), un, s=16,
-                   color=color_un, zorder=3,
-                   label=unconscious_state.upper() if x == 0 else None)
-        aw_means.append(mouse_summary(data, rec_names, "awake", measure))
-        un_means.append(mouse_summary(data, rec_names, unconscious_state, measure))
+    state_offset = 0.08
+    awake_means = []
+    unconscious_means = []
+    for x, (_, recording_name) in enumerate(recording_columns):
+        awake = np.asarray(
+            data[recording_name]["awake"][REF_DENSITY]["Q"],
+            dtype=float,
+        )
+        unconscious = np.asarray(
+            data[recording_name][unconscious_state][REF_DENSITY]["Q"],
+            dtype=float,
+        )
+        ax.scatter(
+            np.full(awake.size, x - state_offset),
+            awake,
+            s=19,
+            color="royalblue",
+            zorder=3,
+            label="Wakefulness" if x == 0 else None,
+        )
+        ax.scatter(
+            np.full(unconscious.size, x + state_offset),
+            unconscious,
+            s=19,
+            color=color_un,
+            zorder=3,
+            label=unconscious_state.upper() if x == 0 else None,
+        )
+        awake_means.append(float(awake.mean()))
+        unconscious_means.append(float(unconscious.mean()))
 
-    xa = len(mouse_groups)  # the "Average" column
-    ax.scatter(np.full(len(aw_means), xa) - .06, aw_means, s=26,
-               color="royalblue", edgecolor="k", lw=.4, zorder=4)
-    ax.scatter(np.full(len(un_means), xa) + .06, un_means, s=26,
-               color=color_un, edgecolor="k", lw=.4, zorder=4)
-    for a, u in zip(aw_means, un_means):          # join each mouse's two states
-        ax.plot([xa - .06, xa + .06], [a, u], color="k", lw=.8, zorder=2)
+    average_x = len(recording_columns)
+    left_x, right_x = average_x - state_offset, average_x + state_offset
+    ax.scatter(
+        np.full(len(awake_means), left_x),
+        awake_means,
+        s=24,
+        color="royalblue",
+        edgecolor="black",
+        linewidth=0.35,
+        zorder=4,
+    )
+    ax.scatter(
+        np.full(len(unconscious_means), right_x),
+        unconscious_means,
+        s=24,
+        color=color_un,
+        edgecolor="black",
+        linewidth=0.35,
+        zorder=4,
+    )
+    for awake_mean, unconscious_mean in zip(awake_means, unconscious_means):
+        ax.plot(
+            [left_x, right_x],
+            [awake_mean, unconscious_mean],
+            color="black",
+            linewidth=0.8,
+            zorder=2,
+        )
 
-    ax.set_xticks(list(range(len(mouse_groups))) + [xa])
-    ax.set_xticklabels([label for label, _ in mouse_groups] + ["Average"], fontsize=8)
-    ax.set_ylabel(MEASURE_LABELS[measure])
-    ax.margins(x=0.04)
-
-
-def per_mouse_figure(data, mouse_groups, unconscious_state, dataset_title):
-    """A 1×2 figure: [# of Modules | Modularity Q], as on the talk slide."""
-    fig, axes = plt.subplots(1, 2, figsize=(13, 4.6))
-    for ax, measure in zip(axes, ("nmod", "Q")):
-        scatter_by_mouse(ax, data, mouse_groups, measure, unconscious_state)
-    axes[0].legend(loc="best", fontsize=9, framealpha=.9)
-    fig.suptitle(dataset_title, y=1.02, fontsize=13)
+    ax.set_xticks(list(range(len(recording_columns))) + [average_x])
+    ax.set_xticklabels(
+        [label for label, _ in recording_columns] + ["Average"],
+        fontsize=8,
+    )
+    ax.set_ylabel("Modularity Q (max over runs)")
+    ax.set_title(f"{title} at K={REF_DENSITY:.0%}")
+    ax.legend(loc="best", fontsize=8, framealpha=0.95)
+    ax.grid(axis="y", color="#dddddd", linewidth=0.6)
+    ax.set_axisbelow(True)
+    ax.margins(x=0.045, y=0.08)
     fig.tight_layout()
     return fig
 
 
-fig_sleep = per_mouse_figure(sleep_data, SLEEP_MOUSE_GROUPS, "nrem",
-                             "Modularity (functional segregation) — Wakefulness vs NREM")
+fig_sleep = window_comparison_figure(
+    sleep_data,
+    SLEEP_RECORDING_COLUMNS,
+    "nrem",
+    "Wakefulness vs NREM",
+)
 fig_sleep.savefig(FIG_DIR / "30_modularity_per_mouse_sleep.png", dpi=140, bbox_inches="tight")
 
-fig_ane = per_mouse_figure(ane_data, ANE_MOUSE_GROUPS, "anesthesia",
-                           "Modularity (functional segregation) — Wakefulness vs Anesthesia")
+fig_ane = window_comparison_figure(
+    ane_data,
+    ANE_RECORDING_COLUMNS,
+    "anesthesia",
+    "Wakefulness vs Anesthesia",
+)
 fig_ane.savefig(FIG_DIR / "30_modularity_per_mouse_ane.png", dpi=140, bbox_inches="tight")
 plt.show()
 print("saved ->", FIG_DIR / "30_modularity_per_mouse_sleep.png")
@@ -239,12 +316,19 @@ print("saved ->", FIG_DIR / "30_modularity_per_mouse_ane.png")
 
 # %%
 def aggregate_curve(data, mouse_groups, state):
-    """Mean±SE of biological-mouse Q values at each density."""
+    """Mean±SE of biological-mouse Q values using a matched window cap."""
     m = np.empty(len(DENSITIES))
     se = np.empty(len(DENSITIES))
     for j, K in enumerate(DENSITIES):
         vals = np.asarray([
-            mouse_summary(data, rec_names, state, "Q", density=K)
+            mouse_summary(
+                data,
+                rec_names,
+                state,
+                "Q",
+                density=K,
+                max_windows=DENSITY_CURVE_WINDOWS,
+            )
             for _, rec_names in mouse_groups
         ], float)
         m[j] = vals.mean()

@@ -42,6 +42,8 @@ scripts/        Python entry-point scripts (import from src.funcnet)
   50_coarse_grain_modularity.py  mesoscale modularity across spatial scales (paper Fig. 7 B–F)
   60_module_spatial_distribution.py  where modules sit: single-cell (intermixed) vs mesoscale
                               (localized) — paper Fig. 5A–C/G/H + Fig. 7F/G/H
+  70_multiscale_module_movie.py  movie of module geography across no averaging and
+                              2/5/10/20/30/40-neighbor spatial coarse-graining
 verification/   library cross-checks & method controls (not part of the teaching sequence)
   50_verify_modularity.py     cross-check modularity vs NetworkX / bctpy / igraph / python-louvain
   51_verify_smallworld.py     cross-check clustering / path length / SWP vs NetworkX / bctpy
@@ -64,9 +66,12 @@ logs/           run logs (downloads, long jobs)
 ## Conventions
 
 - **Hands-on scripts are interactive `# %%` cell scripts** (VS Code / Spyder),
-  **not** `.ipynb`. Reusable logic goes in the broad domain modules under
-  `src/funcnet/`; tutorial-specific settings, orchestration, and teaching cells
-  remain in `scripts/`. Avoid an undifferentiated `utils.py`.
+  **not** `.ipynb`. Write their tutorial workflow as sequential executable
+  cells with editable settings; do not wrap it in `main()` or a command-line
+  entry point unless the user explicitly asks for one. Reusable logic goes in
+  the broad domain modules under `src/funcnet/`; tutorial-specific settings,
+  orchestration, and teaching cells remain in `scripts/`. Avoid an
+  undifferentiated `utils.py`.
 - **Imports:** the package is **not** installed into the venv. Scripts add the
   repo root to the path (anchored to the file, so it works from any working
   directory) and import it by its explicit location, so it is obvious where the
@@ -122,6 +127,7 @@ variables AND stores `.mat` files as **MATLAB v7.3 (HDF5)**. Consequences:
 - [x] Library cross-checks (verification/50/51): custom measures validated against NetworkX / bctpy / igraph / python-louvain
 - [x] Mesoscale coarse-graining (script 50): paper Fig. 7 B–F (modularity vs spatial scale)
 - [x] Spatial distribution of modules (script 60): Fig. 5 A–C/G/H + Fig. 7 F/G/H (intermixed vs localized)
+- [x] Multi-scale module movie (script 70): no averaging through 40-neighbor coarse-graining
 - [x] Shuffle-null confound investigation (verification/): L/Q genuine, C/SWP confounded; C confound driven
       by temporal sparsity — most neurons near-silent, so chance coincidences form per-frame cliques
       (mechanism derived + adversarially verified; OQ1/OQ2 resolved; documents/04)

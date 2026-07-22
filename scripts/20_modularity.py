@@ -17,6 +17,7 @@
 # (3) the **resolution** parameter.
 
 # %%
+import argparse
 import os
 import sys
 
@@ -36,18 +37,82 @@ from src.funcnet.paths import FIG_DIR
 warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
+# %% [markdown]
+# ## Choose the sleep or anesthesia dataset
+# Set ``DEFAULT_DATASET`` when running this file cell-by-cell, or pass
+# ``--dataset sleep`` / ``--dataset anesthesia`` on the command line. Each
+# selection compares the two states from one recording:
+#
+# - sleep: Awake versus NREM, using 1500-frame windows (about 196 s)
+# - anesthesia: Awake versus Anesthesia, using 2900-frame windows (about 379 s)
+#
+# These are the state-specific window lengths in Kiyooka et al.'s modularity
+# code. ``MAX_NEURONS`` keeps this explanatory figure responsive; set it to
+# ``None`` to use every activity-filtered neuron, as in the full analysis. The
+# identical neuron rows are used for both states.
+
 # %%
-# Window length follows the paper: 2900 frames (379 s) for wakefulness-anesthesia
-# recordings, 1500 frames (196 s) for wakefulness-sleep. mouse07_ane is an
-# anesthesia recording, so we use the 2900-frame window here.
-WINDOW = 2900
-rec = dataio.load_recording("mouse07_ane")
-keep = rec.nonzero_ROI if rec.nonzero_ROI is not None else np.ones(rec.n_neurons, bool)
-idx = dataio.state_frames(rec, "awake")[:WINDOW]
-X = rec.spike_smoothed[keep][:, idx]
-coords = rec.centroid[keep]
-C = net.correlation_matrix(X)
-print(f"{rec.name}: {X.shape[0]} active neurons, one awake window of {len(idx)} frames")
+DEFAULT_DATASET = "sleep"
+DEFAULT_RECORDING = {
+    "sleep": "mouse01_sleep",
+    "anesthesia": "mouse07_ane",
+}
+WINDOW_FRAMES = {"sleep": 1500, "anesthesia": 2900}
+MAX_NEURONS = 3000
+N_RUNS = 100
+PROFILE_RUNS = 20
+
+parser = argparse.ArgumentParser(
+    description="Explain modularity for one brain-state dataset"
+)
+parser.add_argument(
+    "--dataset",
+    choices=("sleep", "anesthesia", "ane"),
+    default=DEFAULT_DATASET,
+    help="state pair to plot: sleep (Awake/NREM) or anesthesia (Awake/Anesthesia)",
+)
+parser.add_argument(
+    "--recording",
+    default=None,
+    help="optional recording name; it must belong to the selected dataset",
+)
+options, _unknown = parser.parse_known_args()
+
+DATASET = "anesthesia" if options.dataset == "ane" else options.dataset
+recording_name = options.recording or DEFAULT_RECORDING[DATASET]
+WINDOW = WINDOW_FRAMES[DATASET]
+rec = dataio.load_recording(recording_name)
+expected_data_info = "sleep" if DATASET == "sleep" else "ane"
+if rec.data_info != expected_data_info:
+    raise ValueError(
+        f"{recording_name!r} is a {rec.data_info!r} recording, but "
+        f"--dataset {DATASET!r} was selected"
+    )
+
+rows = dataio.select_neuron_rows(rec, max_neurons=MAX_NEURONS, seed=0)
+coords = rec.centroid[rows]
+state_results = {}
+for label in rec.state_labels:
+    available_frames = dataio.state_frames(rec, label)
+    if available_frames.size < WINDOW:
+        raise ValueError(
+            f"{rec.name} has only {available_frames.size} usable {label} frames; "
+            f"the {DATASET} analysis requires {WINDOW}"
+        )
+    idx = available_frames[:WINDOW]
+    X = rec.spike_smoothed[np.ix_(rows, idx)]
+    state_results[label] = {
+        "frames": idx,
+        "activity": X,
+        "correlation": net.correlation_matrix(X),
+    }
+    print(
+        f"{rec.name}: {label:<10} | {X.shape[0]} shared active neurons | "
+        f"{len(idx)} frames ({len(idx) / rec.fs:.1f} s)"
+    )
+
+STATE_TITLES = {"awake": "Awake", "nrem": "NREM", "anesthesia": "Anesthesia"}
+output_suffix = DATASET
 
 
 def module_display_layout(ci):
@@ -94,22 +159,48 @@ def outline_modules(ax, boundaries, colors, linewidth=1.6):
 # possible edges we keep — so any Q difference reflects *organisation*, not edge
 # count. Following the paper, we rank pairs by **absolute** correlation
 # (``negative=True``): a neuron pair is connected if its ``|r|`` is in the top K.
-# Below: the same correlation matrix thresholded at three densities.
+# Below: each state's correlation matrix thresholded at three densities.
 
 # %%
-fig, axes = plt.subplots(1, 3, figsize=(14, 4.6))
-for ax, K in zip(axes, [0.02, 0.05, 0.10]):
-    adj, thr = net.density_threshold(C, K, negative=True)
-    ci, Q = net.louvain_modularity(adj, gamma=1.0, seed=1, ci0=net.giant_component_init(adj))
-    order, _, boundaries, colors = module_display_layout(ci)
-    ax.imshow(adj[np.ix_(order, order)], cmap="Greys", interpolation="nearest", aspect="equal")
-    outline_modules(ax, boundaries, colors, linewidth=1.3)
-    ax.set_title(f"K = {K:.0%}  (|r|≥{thr:.2f})\nQ = {Q:.3f}, {net.n_modules(ci)} modules")
-    ax.set_xticks([])
-    ax.set_yticks([])
-fig.suptitle("Module-sorted adjacency at increasing density", y=1.02)
-fig.tight_layout()
-fig.savefig(FIG_DIR / "20_density_blocks.png", dpi=140, bbox_inches="tight")
+fig, axes = plt.subplots(2, 3, figsize=(14, 9.0), squeeze=False)
+for row, label in enumerate(rec.state_labels):
+    C = state_results[label]["correlation"]
+    for ax, K_density in zip(axes[row], [0.02, 0.05, 0.10]):
+        adj_density, thr_density = net.density_threshold(C, K_density, negative=True)
+        ci_density, Q_density = net.louvain_modularity(
+            adj_density,
+            gamma=1.0,
+            seed=1,
+            ci0=net.giant_component_init(adj_density),
+        )
+        order_density, _, boundaries_density, colors_density = module_display_layout(
+            ci_density
+        )
+        ax.imshow(
+            adj_density[np.ix_(order_density, order_density)],
+            cmap="Greys",
+            interpolation="nearest",
+            aspect="equal",
+        )
+        outline_modules(ax, boundaries_density, colors_density, linewidth=1.3)
+        ax.set_title(
+            f"K = {K_density:.0%}  (|r|≥{thr_density:.2f})\n"
+            f"Q = {Q_density:.3f}, {net.n_modules(ci_density)} modules"
+        )
+        ax.set_xticks([])
+        ax.set_yticks([])
+    axes[row, 0].set_ylabel(STATE_TITLES[label], fontsize=12, fontweight="bold")
+fig.suptitle(
+    f"{rec.name}: module-sorted adjacency at increasing density\n"
+    f"one {WINDOW}-frame window per state",
+    y=0.995,
+)
+fig.tight_layout(rect=(0, 0, 1, 0.96))
+fig.savefig(
+    FIG_DIR / f"20_density_blocks_{output_suffix}.png",
+    dpi=140,
+    bbox_inches="tight",
+)
 plt.show()
 
 # %% [markdown]
@@ -129,127 +220,182 @@ plt.show()
 
 # %%
 K = 0.05
-adj, thr = net.density_threshold(C, K, negative=True)
-res = net.repeat_louvain(adj, gamma=1.0, n_runs=100, seed=12345)
-print(f"Q over 100 runs: mean={res['Q_all'].mean():.4f}  sd={res['Q_all'].std():.4f}")
-print(f"max-Q = {res['Q_max']:.4f}  with {res['n_modules_max']} modules")
+for label in rec.state_labels:
+    analysis = state_results[label]
+    adj, thr = net.density_threshold(analysis["correlation"], K, negative=True)
+    res = net.repeat_louvain(adj, gamma=1.0, n_runs=N_RUNS, seed=12345)
+    order, display_ci, boundaries, module_colors = module_display_layout(res["ci_max"])
+    analysis.update(
+        {
+            "adjacency": adj,
+            "threshold": thr,
+            "louvain": res,
+            "order": order,
+            "display_ci": display_ci,
+            "boundaries": boundaries,
+            "module_colors": module_colors,
+        }
+    )
+    print(
+        f"{STATE_TITLES[label]:<10} Q over {N_RUNS} runs: "
+        f"mean={res['Q_all'].mean():.4f}  sd={res['Q_all'].std():.4f}  |  "
+        f"max-Q={res['Q_max']:.4f}, {res['n_modules_max']} modules"
+    )
 
 # %% [markdown]
-# ## From correlations to modules, step by step
-# The complete fixed-density pipeline is shown below.  The first two panels
-# retain the original neuron order.  Louvain then assigns a module to every
-# neuron; in the last panel we reorder neurons by that assignment so dense
-# within-module connections become diagonal blocks.  The coloured strip and
-# matching outlines explicitly show the assignments.  Because Louvain's raw
-# integer labels are arbitrary, display module 1 is simply the largest module,
-# module 2 the next largest, and so on; this relabelling does not alter Q.
+# ## From correlations to modules, state by state
+# The complete fixed-density pipeline is shown as one separate row per state:
+# Awake plus NREM for the sleep dataset, or Awake plus Anesthesia for the
+# anesthesia dataset. The first two columns retain the original neuron order.
+# Louvain then assigns a module to every neuron; in the last column we reorder
+# neurons by that assignment so dense within-module connections become diagonal
+# blocks. The coloured strip and matching outlines explicitly show the
+# assignments. Because Louvain's raw integer labels are arbitrary, display
+# module 1 is simply the largest module, module 2 the next largest, and so on;
+# this relabelling does not alter Q.
 
 # %%
-ci = res["ci_max"]
-order, display_ci, boundaries, module_colors = module_display_layout(ci)
-n_display_modules = len(boundaries) - 1
-module_cmap = ListedColormap(module_colors)
-
 fig, axes = plt.subplots(
-    1,
+    2,
     3,
-    figsize=(16, 5.7),
+    figsize=(16, 10.6),
+    squeeze=False,
     gridspec_kw={"width_ratios": [1.12, 1.0, 1.0]},
 )
-ax_corr, ax_binary, ax_sorted = axes
-
-# Use a robust symmetric colour range so a handful of extreme correlations do
-# not hide the correlation structure that drives thresholding.
-upper_triangle = C[np.triu_indices_from(C, k=1)]
-corr_limit = max(float(np.percentile(np.abs(upper_triangle), 99.5)), 1e-6)
-corr_image = ax_corr.imshow(
-    C,
-    cmap="RdBu_r",
-    vmin=-corr_limit,
-    vmax=corr_limit,
-    interpolation="nearest",
-    aspect="equal",
-)
-colorbar = fig.colorbar(corr_image, ax=ax_corr, fraction=0.046, pad=0.04)
-colorbar.set_label("Pearson correlation, r")
-ax_corr.set_title("1 | Correlation matrix\nall neuron pairs")
-ax_corr.set_xlabel("neuron ID")
-ax_corr.set_ylabel("neuron ID")
-
 binary_cmap = ListedColormap(["white", "#202020"])
-ax_binary.imshow(
-    adj,
-    cmap=binary_cmap,
-    vmin=0,
-    vmax=1,
-    interpolation="nearest",
-    aspect="equal",
-)
-ax_binary.set_title(f"2 | Fixed-density binarization\nK={K:.0%}, keep top |r| (threshold={thr:.3f})")
-ax_binary.set_xlabel("neuron ID (original order)")
-ax_binary.set_ylabel("neuron ID")
+for row, label in enumerate(rec.state_labels):
+    analysis = state_results[label]
+    C = analysis["correlation"]
+    adj = analysis["adjacency"]
+    thr = analysis["threshold"]
+    res = analysis["louvain"]
+    order = analysis["order"]
+    display_ci = analysis["display_ci"]
+    boundaries = analysis["boundaries"]
+    module_colors = analysis["module_colors"]
+    n_display_modules = len(boundaries) - 1
+    module_cmap = ListedColormap(module_colors)
+    ax_corr, ax_binary, ax_sorted = axes[row]
 
-ax_sorted.imshow(
-    adj[np.ix_(order, order)],
-    cmap=binary_cmap,
-    vmin=0,
-    vmax=1,
-    interpolation="nearest",
-    aspect="equal",
-)
-outline_modules(ax_sorted, boundaries, module_colors, linewidth=1.8)
-ax_sorted.set_title(
-    f"3 | Louvain module assignments\nmax Q={res['Q_max']:.3f}, "
-    f"{n_display_modules} modules"
-)
-ax_sorted.set_xlabel("neuron (grouped by module)")
-ax_sorted.set_ylabel("")
+    # Use a robust symmetric colour range so a handful of extreme correlations
+    # do not hide the correlation structure that drives thresholding.
+    upper_triangle = C[np.triu_indices_from(C, k=1)]
+    corr_limit = max(float(np.percentile(np.abs(upper_triangle), 99.5)), 1e-6)
+    corr_image = ax_corr.imshow(
+        C,
+        cmap="RdBu_r",
+        vmin=-corr_limit,
+        vmax=corr_limit,
+        interpolation="nearest",
+        aspect="equal",
+    )
+    colorbar = fig.colorbar(corr_image, ax=ax_corr, fraction=0.046, pad=0.04)
+    colorbar.set_label("Pearson correlation, r")
+    ax_corr.set_title("1 | Correlation matrix\nall neuron pairs")
+    ax_corr.set_xlabel("neuron ID")
+    ax_corr.set_ylabel(f"{STATE_TITLES[label]}\nneuron ID", fontweight="bold")
 
-# A row-aligned categorical strip makes the assignment explicit even for
-# modules whose within-module block is visually sparse.
-module_strip = ax_sorted.inset_axes((-0.105, 0.0, 0.025, 1.0))
-module_strip.imshow(
-    display_ci[order, None],
-    cmap=module_cmap,
-    vmin=-0.5,
-    vmax=n_display_modules - 0.5,
-    interpolation="nearest",
-    aspect="auto",
+    ax_binary.imshow(
+        adj,
+        cmap=binary_cmap,
+        vmin=0,
+        vmax=1,
+        interpolation="nearest",
+        aspect="equal",
+    )
+    ax_binary.set_title(
+        f"2 | Fixed-density binarization\n"
+        f"K={K:.0%}, keep top |r| (threshold={thr:.3f})"
+    )
+    ax_binary.set_xlabel("neuron ID (original order)")
+    ax_binary.set_ylabel("neuron ID")
+
+    ax_sorted.imshow(
+        adj[np.ix_(order, order)],
+        cmap=binary_cmap,
+        vmin=0,
+        vmax=1,
+        interpolation="nearest",
+        aspect="equal",
+    )
+    outline_modules(ax_sorted, boundaries, module_colors, linewidth=1.8)
+    ax_sorted.set_title(
+        f"3 | Louvain module assignments\nmax Q={res['Q_max']:.3f}, "
+        f"{n_display_modules} modules"
+    )
+    ax_sorted.set_xlabel("neuron (grouped by module)")
+    ax_sorted.set_ylabel("")
+
+    # A row-aligned categorical strip makes the assignment explicit even for
+    # modules whose within-module block is visually sparse.
+    module_strip = ax_sorted.inset_axes((-0.105, 0.0, 0.025, 1.0))
+    module_strip.imshow(
+        display_ci[order, None],
+        cmap=module_cmap,
+        vmin=-0.5,
+        vmax=n_display_modules - 0.5,
+        interpolation="nearest",
+        aspect="auto",
+    )
+    module_centres = (boundaries[:-1] + boundaries[1:] - 1) / 2
+    module_strip.set_xticks([])
+    module_strip.set_yticks(module_centres)
+    module_strip.set_yticklabels(np.arange(1, n_display_modules + 1))
+    module_strip.tick_params(axis="y", length=0, labelsize=8, pad=2)
+    module_strip.set_ylabel("display module", fontsize=9, labelpad=6)
+    for spine in module_strip.spines.values():
+        spine.set_visible(False)
+
+    for ax in axes[row]:
+        ax.tick_params(labelsize=8)
+
+fig.suptitle(
+    f"Computing modularity from population activity | {rec.name}\n"
+    f"{WINDOW} frames per state ({WINDOW / rec.fs:.1f} s)",
+    fontsize=17,
+    y=0.985,
 )
-module_centres = (boundaries[:-1] + boundaries[1:] - 1) / 2
-module_strip.set_xticks([])
-module_strip.set_yticks(module_centres)
-module_strip.set_yticklabels(np.arange(1, n_display_modules + 1))
-module_strip.tick_params(axis="y", length=0, labelsize=8, pad=2)
-module_strip.set_ylabel("display module", fontsize=9, labelpad=6)
-for spine in module_strip.spines.values():
-    spine.set_visible(False)
-
-for ax in axes:
-    ax.tick_params(labelsize=8)
-
-fig.suptitle("Computing modularity from population activity", fontsize=17, y=0.98)
 fig.text(
     0.5,
-    0.025,
+    0.02,
     "Thresholding fixes the edge count; repeated Louvain searches assignments "
     "that maximize within-module connectivity relative to the degree-matched null model.",
     ha="center",
     fontsize=10,
 )
-fig.subplots_adjust(left=0.055, right=0.985, bottom=0.14, top=0.86, wspace=0.30)
-fig.savefig(FIG_DIR / "20_modularity_pipeline.png", dpi=180, bbox_inches="tight")
+fig.subplots_adjust(
+    left=0.065,
+    right=0.985,
+    bottom=0.085,
+    top=0.88,
+    hspace=0.38,
+    wspace=0.30,
+)
+fig.savefig(
+    FIG_DIR / f"20_modularity_pipeline_{output_suffix}.png",
+    dpi=180,
+    bbox_inches="tight",
+)
 plt.show()
 
-fig, ax = plt.subplots(figsize=(7, 4))
-ax.hist(res["Q_all"], bins=25, color="steelblue", alpha=0.8)
-ax.axvline(res["Q_max"], color="crimson", lw=2, label=f"max-Q = {res['Q_max']:.3f}")
-ax.set_xlabel("modularity Q")
-ax.set_ylabel("count (of 100 runs)")
-ax.set_title("Stochasticity of Louvain — why we take the maximum")
-ax.legend()
+state_colors = {"awake": "steelblue", "nrem": "crimson", "anesthesia": "goldenrod"}
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), squeeze=False)
+for ax, label in zip(axes[0], rec.state_labels):
+    res = state_results[label]["louvain"]
+    ax.hist(res["Q_all"], bins=25, color=state_colors[label], alpha=0.8)
+    ax.axvline(
+        res["Q_max"],
+        color="black",
+        lw=2,
+        label=f"max-Q = {res['Q_max']:.3f}",
+    )
+    ax.set_xlabel("modularity Q")
+    ax.set_ylabel(f"count (of {N_RUNS} runs)")
+    ax.set_title(STATE_TITLES[label])
+    ax.legend()
+fig.suptitle(f"{rec.name}: Louvain stochasticity — why we take the maximum")
 fig.tight_layout()
-fig.savefig(FIG_DIR / "20_louvain_distribution.png", dpi=140)
+fig.savefig(FIG_DIR / f"20_louvain_distribution_{output_suffix}.png", dpi=140)
 plt.show()
 
 # %% [markdown]
@@ -260,11 +406,20 @@ plt.show()
 
 # %%
 gammas = [0.5, 1.0, 1.5, 2.0]
-prof = [(g, *(lambda r: (r["Q_max"], r["n_modules_max"]))(
-            net.repeat_louvain(adj, gamma=g, n_runs=20, seed=12345)))
-        for g in gammas]
-for g, Qm, nm in prof:
-    print(f"  γ={g:<4}  max-Q={Qm:.3f}  modules={nm}")
+for label in rec.state_labels:
+    print(f"{STATE_TITLES[label]} resolution profile:")
+    adj = state_results[label]["adjacency"]
+    for gamma in gammas:
+        gamma_result = net.repeat_louvain(
+            adj,
+            gamma=gamma,
+            n_runs=PROFILE_RUNS,
+            seed=12345,
+        )
+        print(
+            f"  γ={gamma:<4}  max-Q={gamma_result['Q_max']:.3f}  "
+            f"modules={gamma_result['n_modules_max']}"
+        )
 
 # %% [markdown]
 # ## The spatial module map
@@ -274,35 +429,50 @@ for g, Qm, nm in prof:
 # modules.
 
 # %%
-fig, ax = plt.subplots(figsize=(6.5, 6.5))
-scatter = ax.scatter(
-    coords[:, 0],
-    coords[:, 1],
-    c=display_ci,
-    s=16,
-    cmap=module_cmap,
-    vmin=-0.5,
-    vmax=n_display_modules - 0.5,
-)
-ax.set_aspect("equal")
-ax.invert_yaxis()
-ax.set_title(
-    f"{rec.name} — awake, K={K:.0%}\n"
-    f"{n_display_modules} spatially intermixed modules"
-)
-ax.set_xlabel("x (px)")
-ax.set_ylabel("y (px)")
-module_ticks = np.arange(n_display_modules)
-module_colorbar = fig.colorbar(scatter, ax=ax, ticks=module_ticks, fraction=0.046, pad=0.04)
-module_colorbar.ax.set_yticklabels(module_ticks + 1)
-module_colorbar.set_label("display module (size-ranked)")
+fig, axes = plt.subplots(1, 2, figsize=(12.5, 5.8), squeeze=False)
+for ax, label in zip(axes[0], rec.state_labels):
+    analysis = state_results[label]
+    display_ci = analysis["display_ci"]
+    boundaries = analysis["boundaries"]
+    module_colors = analysis["module_colors"]
+    n_display_modules = len(boundaries) - 1
+    module_cmap = ListedColormap(module_colors)
+    scatter = ax.scatter(
+        coords[:, 0],
+        coords[:, 1],
+        c=display_ci,
+        s=12,
+        cmap=module_cmap,
+        vmin=-0.5,
+        vmax=n_display_modules - 0.5,
+    )
+    ax.set_aspect("equal")
+    ax.invert_yaxis()
+    ax.set_title(
+        f"{STATE_TITLES[label]}, K={K:.0%}\n"
+        f"{n_display_modules} spatially intermixed modules"
+    )
+    ax.set_xlabel("x (px)")
+    ax.set_ylabel("y (px)")
+    module_ticks = np.arange(n_display_modules)
+    module_colorbar = fig.colorbar(
+        scatter,
+        ax=ax,
+        ticks=module_ticks,
+        fraction=0.046,
+        pad=0.04,
+    )
+    module_colorbar.ax.set_yticklabels(module_ticks + 1)
+    module_colorbar.set_label("display module (size-ranked)")
+fig.suptitle(f"{rec.name}: spatial module assignments from matched state windows")
 fig.tight_layout()
-fig.savefig(FIG_DIR / "20_spatial_modules.png", dpi=140)
+fig.savefig(FIG_DIR / f"20_spatial_modules_{output_suffix}.png", dpi=140)
 plt.show()
 
 # %% [markdown]
 # ## Takeaway
 # We can now quantify modular organisation of a functional network with a single
-# robust number (max-Q over many runs) at a fixed density. The final script,
-# ``30_state_comparison.py``, applies this to **compare states** and reproduces
-# the paper's finding that modularity is higher during unconsciousness.
+# robust number (max-Q over many runs) at a fixed density. Here the complete
+# procedure is displayed independently for one Awake window and one
+# NREM/Anesthesia window. The final script, ``30_state_comparison.py``, repeats
+# this across animals and windows to test the state difference.

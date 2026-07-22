@@ -633,9 +633,11 @@ def make_raster_figure(views, page_label=None):
 #
 # The narrow strip at the left contains one categorical region color for every
 # neuron row. Thin horizontal lines mark region boundaries. The layer `2/3`
-# suffix is removed for display, but all 17 atlas acronyms in this dataset remain
-# distinct. `Other` handles an unexpected valid label and `Unknown` a missing or
-# unassigned label. No neuron is filtered or averaged.
+# suffix is removed for display, but supplied area acronyms remain distinct.
+# Source ``root`` is shown as ``Unassigned`` because it names no specific area;
+# `Other` handles an unexpected valid acronym and `Unknown` a missing label. No
+# neuron is filtered or averaged. Related families share hues: motor greens,
+# somatosensory warm colors, retrosplenial blues, and visual purples.
 
 
 # %%
@@ -784,8 +786,10 @@ def make_rastermap_figure(views, page_label=None):
 # time axes legible. With `SHOW_FIGURES = True`, every page is also displayed in
 # the interactive window as soon as it is created.
 #
-# `RECORDING_MODE = "representative"` instead loads the two preview sessions,
-# places them in the original combined PNG figures, and displays them. Changing
+# `RECORDING_MODE = "representative"` instead loads the two preview sessions.
+# The activity-ranked, region-grouped, and Rastermap rasters are each saved as
+# separate sleep and anesthesia PNGs so every timeline has a full-size panel.
+# Only the ΔF/F overview retains its combined two-session layout. Changing
 # `VIEW_WINDOWS_MIN` to a tuple only zooms the named page; every `None` entry
 # above retains that session's complete sequence.
 #
@@ -805,6 +809,7 @@ ALL_RECORDINGS = SLEEP_RECORDINGS + ANESTHESIA_RECORDINGS
 TRACE_SEED_BY_RECORDING = {
     name: RANDOM_SEED + index for index, name in enumerate(ALL_RECORDINGS)
 }
+CONDITION_NAME_BY_DATA_INFO = {"sleep": "sleep", "ane": "anesthesia"}
 
 
 def load_view(recording_name):
@@ -867,34 +872,63 @@ if representative_views:
 # ### Step 3 — inspect the activity-ranked binary spike raster
 #
 # This is the simple baseline ordering: neurons with more positive deconvolved
-# samples over the complete session appear near the top.
+# samples over the complete session appear near the top. Sleep and anesthesia
+# are intentionally separate figure objects and output files here: their time
+# axes and neuron counts differ, and neither panel is compressed to make room
+# for the other.
 
 # %%
-raster_fig = None
+raster_figs = {}
+raster_paths = {}
 if representative_views:
-    raster_fig = make_raster_figure(representative_views)
-    raster_path = FIG_DIR / "02_spike_rasters_by_activity.png"
-    raster_fig.savefig(raster_path, dpi=150, bbox_inches="tight")
-    print("saved ->", raster_path)
+    for view in representative_views:
+        condition = CONDITION_NAME_BY_DATA_INFO[view["data_info"]]
+        raster_figs[condition] = make_raster_figure((view,))
+        raster_paths[condition] = (
+            FIG_DIR / f"02_spike_rasters_by_activity_{condition}.png"
+        )
+        raster_figs[condition].savefig(
+            raster_paths[condition],
+            dpi=150,
+            bbox_inches="tight",
+        )
+        print("saved ->", raster_paths[condition])
     if SHOW_FIGURES:
         plt.show()
+
+# Named aliases are convenient when running the tutorial cell by cell.
+sleep_raster_fig = raster_figs.get("sleep")
+anesthesia_raster_fig = raster_figs.get("anesthesia")
 
 
 # %% [markdown]
 # ### Step 4 — inspect the brain-region-grouped binary spike raster
 #
 # The binary events are identical to Step 3; only the neuron order changes.
-# Every atlas-region block remains activity-ranked internally.
+# Every atlas-region block remains activity-ranked internally. As in Step 3,
+# the sleep and anesthesia sessions are saved as independent figures.
 
 # %%
-region_raster_fig = None
+region_raster_figs = {}
+region_raster_paths = {}
 if representative_views:
-    region_raster_fig = make_region_raster_figure(representative_views)
-    region_raster_path = FIG_DIR / "02_spike_rasters_by_region.png"
-    region_raster_fig.savefig(region_raster_path, dpi=150, bbox_inches="tight")
-    print("saved ->", region_raster_path)
+    for view in representative_views:
+        condition = CONDITION_NAME_BY_DATA_INFO[view["data_info"]]
+        region_raster_figs[condition] = make_region_raster_figure((view,))
+        region_raster_paths[condition] = (
+            FIG_DIR / f"02_spike_rasters_by_region_{condition}.png"
+        )
+        region_raster_figs[condition].savefig(
+            region_raster_paths[condition],
+            dpi=150,
+            bbox_inches="tight",
+        )
+        print("saved ->", region_raster_paths[condition])
     if SHOW_FIGURES:
         plt.show()
+
+sleep_region_raster_fig = region_raster_figs.get("sleep")
+anesthesia_region_raster_fig = region_raster_figs.get("anesthesia")
 
 
 # %% [markdown]
@@ -902,17 +936,28 @@ if representative_views:
 #
 # Unlike Steps 3--4, this view excludes neurons below the explicit activity
 # threshold. The order uses the official model and every recorded frame; the
-# cortical strip is annotation, not an input to Rastermap.
+# cortical strip is annotation, not an input to Rastermap. Sleep and anesthesia
+# are again kept in separate figures.
 
 # %%
-rastermap_fig = None
+rastermap_figs = {}
+rastermap_paths = {}
 if representative_views and RUN_RASTERMAP:
-    rastermap_fig = make_rastermap_figure(representative_views)
-    rastermap_path = FIG_DIR / "02_rastermap.png"
-    rastermap_fig.savefig(rastermap_path, dpi=150, bbox_inches="tight")
-    print("saved ->", rastermap_path)
+    for view in representative_views:
+        condition = CONDITION_NAME_BY_DATA_INFO[view["data_info"]]
+        rastermap_figs[condition] = make_rastermap_figure((view,))
+        rastermap_paths[condition] = FIG_DIR / f"02_rastermap_{condition}.png"
+        rastermap_figs[condition].savefig(
+            rastermap_paths[condition],
+            dpi=150,
+            bbox_inches="tight",
+        )
+        print("saved ->", rastermap_paths[condition])
     if SHOW_FIGURES:
         plt.show()
+
+sleep_rastermap_fig = rastermap_figs.get("sleep")
+anesthesia_rastermap_fig = rastermap_figs.get("anesthesia")
 
 
 # %% [markdown]

@@ -7,7 +7,10 @@ import unittest
 import numpy as np
 from sklearn.covariance import graphical_lasso
 
-from glasso_analysis.comparison import exact_fixed_density
+from glasso_analysis.comparison import (
+    exact_fixed_density,
+    exact_fixed_density_blockwise,
+)
 from glasso_analysis.estimation import (
     empirical_correlation,
     fit_screened_graphical_lasso,
@@ -53,7 +56,18 @@ class EstimationTests(unittest.TestCase):
         selected = exact_fixed_density(matrix, 0.1, require_nonzero=True)
         self.assertEqual(selected.adjacency.nnz // 2, 1)
 
+    def test_blockwise_density_matches_dense_selection(self) -> None:
+        rng = np.random.default_rng(12)
+        matrix = rng.normal(size=(31, 31))
+        matrix = (matrix + matrix.T) / 2
+        np.fill_diagonal(matrix, 1)
+        expected = exact_fixed_density(matrix, 0.17)
+        observed = exact_fixed_density_blockwise(matrix, 0.17, block_rows=7)
+        np.testing.assert_array_equal(observed.rows, expected.rows)
+        np.testing.assert_array_equal(observed.cols, expected.cols)
+        np.testing.assert_allclose(observed.weights, expected.weights)
+        self.assertEqual(observed.threshold, expected.threshold)
+
 
 if __name__ == "__main__":
     unittest.main()
-

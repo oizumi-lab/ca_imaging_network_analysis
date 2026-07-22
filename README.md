@@ -61,6 +61,7 @@ for the later quick validation exercises.
 | `40_small_world.py` | Path length, clustering coefficient, small-world-ness / SWP |
 | `50_coarse_grain_modularity.py` | Rebuild modular networks across spatial scales |
 | `60_module_spatial_distribution.py` | Compare intermixed single-cell and localized mesoscale modules |
+| `70_multiscale_module_movie.py` | Animate module geography across coarse-graining scales with selectable sleep/anesthesia state and Q-max/consensus clustering |
 
 The earlier, more exhaustive Rastermap validation workflows are preserved for
 reference in [`scripts/arxiv/`](scripts/arxiv/):

@@ -49,7 +49,7 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 #   acquisition segment, so filtering never crosses a microscope break.
 
 # %%
-DETAILED_RECORDING = "mouse02_sleep"
+DETAILED_RECORDING = "mouse01_sleep"
 # DETAILED_RECORDING = "mouse03_ane"
 COMPARISON_NEURON_COUNT = 10
 COMPARISON_TIME_RANGE_MIN = (0.0, 5.0)  # (start_min, end_min), or None
@@ -231,9 +231,9 @@ print(cohorts.to_string())
 # %% [markdown]
 # ### Dataset at a glance
 #
-# The left panel shows spatial scale (number of recorded ROIs). The right panel
-# shows the proportion of every raw label in ``state``. Sleep files can contain
-# awake, quiet awake, NREM, and REM; anesthesia files contain awake and
+# The panels show spatial scale (number of recorded ROIs), recording duration in
+# minutes, and the proportion of every raw label in ``state``. Sleep files can
+# contain awake, quiet awake, NREM, and REM; anesthesia files contain awake and
 # anesthesia. Every recorded frame contributes exactly once. No paper-specific
 # frame-selection mask is applied.
 
@@ -250,12 +250,12 @@ state_display = (
     ("anesthesia", "Anesthesia"),
 )
 
-fig, (ax_rois, ax_time) = plt.subplots(
+fig, (ax_rois, ax_duration, ax_state) = plt.subplots(
     1,
-    2,
-    figsize=(13, 6.8),
+    3,
+    figsize=(16.5, 6.8),
     sharey=True,
-    gridspec_kw={"width_ratios": [0.9, 1.4]},
+    gridspec_kw={"width_ratios": [0.9, 0.9, 1.4]},
 )
 
 roi_bars = ax_rois.barh(y, inventory["rois"] / 1000, color=roi_colors)
@@ -280,10 +280,22 @@ ax_rois.legend(
     frameon=False,
 )
 
+duration_bars = ax_duration.barh(y, inventory["minutes"], color=roi_colors)
+ax_duration.bar_label(
+    duration_bars,
+    labels=[f"{value:.1f}" for value in inventory["minutes"]],
+    padding=3,
+    fontsize=8,
+)
+ax_duration.set_xlabel("duration (min)")
+ax_duration.set_title("Recording duration")
+ax_duration.set_xlim(0, inventory["minutes"].max() * 1.18)
+ax_duration.grid(axis="x", alpha=0.2)
+
 left = np.zeros(len(inventory))
 for label, display_name in state_display:
     values = inventory[f"{label}_pct"].to_numpy()
-    ax_time.barh(
+    ax_state.barh(
         y,
         values,
         left=left,
@@ -293,7 +305,7 @@ for label, display_name in state_display:
     for row, (start, width) in enumerate(zip(left, values)):
         if width >= 5:
             text_color = "black" if label in {"quiet_awake", "anesthesia"} else "white"
-            ax_time.text(
+            ax_state.text(
                 start + width / 2,
                 row,
                 f"{width:.0f}%",
@@ -303,11 +315,11 @@ for label, display_name in state_display:
                 fontsize=7,
             )
     left += values
-ax_time.set_xlabel("proportion of recorded frames (%)")
-ax_time.set_title("Raw brain-state labels")
-ax_time.set_xlim(0, 100)
-ax_time.grid(axis="x", alpha=0.2)
-ax_time.legend(
+ax_state.set_xlabel("proportion of recorded frames (%)")
+ax_state.set_title("Raw brain-state labels")
+ax_state.set_xlim(0, 100)
+ax_state.grid(axis="x", alpha=0.2)
+ax_state.legend(
     handles=[
         Patch(color=viz.DEFAULT_STATE_COLORS[label], label=display_name)
         for label, display_name in state_display
@@ -323,6 +335,89 @@ summary_figure_path = FIG_DIR / "00_dataset_inventory.png"
 fig.savefig(summary_figure_path, dpi=160, bbox_inches="tight")
 plt.show()
 print("saved ->", summary_figure_path)
+
+# %% [markdown]
+# ### Which cortical areas occur in each recording?
+#
+# Atlas coverage varies with the imaging field. This lightweight inventory reads
+# only the row-aligned atlas strings and activity mask from each HDF5 file. It
+# reports exact layer-collapsed areas for all recorded ROIs and for the optional
+# publication ``nonzero_ROI`` subset. Every current recording contains at least
+# one visual area; the less common visual and somatosensory subdivisions occur
+# only in particular sessions. Source label ``root`` is the top of the Allen
+# ontology rather than a cortical area, so figures call it ``Unassigned`` while
+# retaining its count. Colors are organized by family: motor greens,
+# somatosensory warm colors, retrosplenial blues, and visual purples.
+
+# %%
+def inspect_recording_atlas(recording_name: str) -> list[dict[str, object]]:
+    """Return exact displayed-area counts without loading activity matrices."""
+    path = RAW_DIR / f"{recording_name}.mat"
+    atlas_labels = dataio.load_atlas_labels(path)
+    if atlas_labels is None:
+        raise ValueError(f"{path.name}: no row-aligned atlas labels were found")
+
+    with h5py.File(path, "r") as mat:
+        active_mask = (
+            np.asarray(mat["nonzero_ROI"])
+            .ravel(order="F")
+            .astype(bool, copy=False)
+        )
+    source_regions = np.asarray(
+        [str(label).removesuffix("2/3") for label in atlas_labels],
+        dtype=object,
+    )
+    display_regions = viz.brain_region_labels(atlas_labels)
+    if active_mask.shape != display_regions.shape:
+        raise ValueError(f"{path.name}: atlas and nonzero_ROI rows do not align")
+
+    paradigm = "Sleep" if recording_name.endswith("sleep") else "Anesthesia"
+    rows = []
+    for region in viz.BRAIN_REGION_COLORS:
+        selected = display_regions == region
+        if not np.any(selected):
+            continue
+        source_labels = ", ".join(sorted(set(source_regions[selected].tolist())))
+        recorded = int(np.count_nonzero(selected))
+        analysis = int(np.count_nonzero(selected & active_mask))
+        rows.append(
+            {
+                "recording": recording_name,
+                "paradigm": paradigm,
+                "family": viz.BRAIN_REGION_FAMILIES[region],
+                "display_region": region,
+                "source_labels": source_labels,
+                "recorded_rois": recorded,
+                "nonzero_roi_rois": analysis,
+                "excluded_rois": recorded - analysis,
+            }
+        )
+    return rows
+
+
+atlas_inventory = pd.DataFrame(
+    row
+    for recording_name in recording_names
+    for row in inspect_recording_atlas(recording_name)
+)
+atlas_inventory_path = RESULTS_DIR / "00_atlas_region_inventory.csv"
+atlas_inventory.to_csv(atlas_inventory_path, index=False)
+
+atlas_count_table = atlas_inventory.pivot(
+    index="recording",
+    columns="display_region",
+    values="recorded_rois",
+).fillna(0).astype(int)
+ordered_present_regions = [
+    region for region in viz.BRAIN_REGION_COLORS if region in atlas_count_table
+]
+atlas_count_table = atlas_count_table.reindex(
+    index=recording_names,
+    columns=ordered_present_regions,
+)
+print("\nExact cortical-area counts by recording (all recorded ROIs):")
+print(atlas_count_table.to_string())
+print("\nsaved atlas inventory with nonzero_ROI counts ->", atlas_inventory_path)
 
 # %% [markdown]
 # ## Inspect one example recording in detail
@@ -733,18 +828,15 @@ print("saved compatibility copy ->", legacy_raster_path)
 # ## Spatial layout and cortical-region labels
 # Each neuron has both an (x, y) centroid in the 3 mm × 3 mm imaging field and a
 # row-aligned Allen-atlas acronym such as ``MOp2/3`` or ``SSp-bfd2/3``. The
-# recording targeted layer 2/3, so the shared ``2/3`` suffix is removed. The
-# legend shows each compact acronym alongside its unabridged Allen-area name. To
-# match the compact reference figure, visual areas, the two minor SSp
-# subdivisions, and ``root`` are grouped as ``Other``. A genuinely missing or
-# unassigned atlas label would instead appear as the distinct ``Unknown``
-# category. Motor areas use greens, primary somatosensory subdivisions span
-# burnt orange, red, coral, pink, and magenta, retrosplenial areas use blues,
-# and grouped ``Other`` labels use gray. Yellow and yellow-green hues are
-# deliberately avoided for slide readability.
+# recording targeted layer 2/3, so the shared ``2/3`` suffix is removed. Every
+# supplied area remains explicit, including visual and minor somatosensory
+# subdivisions. The source ``root`` label becomes ``Unassigned`` because it is
+# the Allen ontology root, not a specific cortical area. A missing label would
+# instead appear as ``Unknown``. Motor areas use greens, somatosensory areas use
+# warm colors, retrosplenial areas use blues, and visual areas use purples.
 # Every recorded neuron is still plotted—``nonzero_ROI`` is not applied. The
 # palette and label mapping live in the shared visualization module so the
-# spatial map and Rastermap row strip use exactly the same encoding.
+# spatial map, region raster, and Rastermap row strip use the same encoding.
 
 # %%
 if rec.atlas is None:
@@ -753,11 +845,10 @@ atlas = np.asarray(rec.atlas, dtype=str)
 if atlas.shape != (rec.n_neurons,):
     raise ValueError("Atlas labels are not aligned one-to-one with neuron rows")
 
-display_regions = viz.cortical_region_labels(atlas)
+display_regions = viz.brain_region_labels(atlas)
+present_regions = set(display_regions.tolist())
 region_order = tuple(
-    region
-    for region in viz.CORTICAL_REGION_COLORS
-    if region != "Unknown" or np.any(display_regions == "Unknown")
+    region for region in viz.BRAIN_REGION_COLORS if region in present_regions
 )
 print("Cortical-region counts (layer suffix collapsed):")
 for region in region_order:
@@ -766,12 +857,16 @@ for region in region_order:
 um = rec.centroid_um
 fig, ax = plt.subplots(figsize=(10.5, 6.2))
 
-# Draw catch-all/missing groups first so named cortical areas remain crisp.
+# Draw non-area/fallback groups first so named cortical areas remain crisp.
 background_regions = tuple(
-    region for region in ("Other", "Unknown") if region in region_order
+    region
+    for region in ("Unassigned", "Other", "Unknown")
+    if region in region_order
 )
 named_regions = tuple(
-    region for region in region_order if region not in {"Other", "Unknown"}
+    region
+    for region in region_order
+    if region not in {"Unassigned", "Other", "Unknown"}
 )
 for region in (*background_regions, *named_regions):
     selected = display_regions == region
@@ -779,11 +874,11 @@ for region in (*background_regions, *named_regions):
         um[selected, 0],
         um[selected, 1],
         s=5,
-        color=viz.CORTICAL_REGION_COLORS[region],
+        color=viz.BRAIN_REGION_COLORS[region],
         alpha=0.88,
         linewidths=0,
         rasterized=True,
-        zorder=1 if region in {"Other", "Unknown"} else 2,
+        zorder=1 if region in {"Unassigned", "Other", "Unknown"} else 2,
     )
 
 ax.set_aspect("equal")
@@ -808,7 +903,7 @@ legend = ax.legend(
     borderaxespad=0,
 )
 for text, region in zip(legend.get_texts(), region_order):
-    text.set_color(viz.CORTICAL_REGION_COLORS[region])
+    text.set_color(viz.BRAIN_REGION_COLORS[region])
 for spine in ax.spines.values():
     spine.set_color("0.35")
     spine.set_linewidth(0.9)

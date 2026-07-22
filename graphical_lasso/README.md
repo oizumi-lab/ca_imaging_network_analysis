@@ -41,8 +41,8 @@ cross-checks QUIC against scikit-learn before any recording result is accepted.
 
 ## Run order
 
-Both scripts are `# %%` cell scripts and can be run cell by cell in VS Code or
-Spyder. They are also executable end to end:
+The scripts use `# %%` cells and can be run cell by cell in VS Code or Spyder.
+They are also executable end to end:
 
 ```bash
 PYTHONPATH=graphical_lasso/src MPLBACKEND=Agg MPLCONFIGDIR=/tmp/mplconfig \
@@ -53,14 +53,24 @@ PYTHONPATH=graphical_lasso/src MPLBACKEND=Agg MPLCONFIGDIR=/tmp/mplconfig \
 
 PYTHONPATH=graphical_lasso/src poetry run python \
   graphical_lasso/scripts/02_summarize_full_neuron_results.py
+
+PYTHONPATH=graphical_lasso/src MPLBACKEND=Agg MPLCONFIGDIR=/tmp/mplconfig \
+  poetry run python graphical_lasso/scripts/03_display_graph_sparsity.py
 ```
 
 To run one recording at a time, set `GLASSO_RECORDING` to
 `mouse01_sleep` or `mouse05_ane`. Per-alpha checkpoints make interrupted fits
 resumable.
 
-To rebuild only the summary figures from existing CSV tables, without loading
-the full matrices, set `GLASSO_SUMMARY_FIGURES_ONLY=1` for script `01`.
+Script `01` keeps two analyses separate: a direct Pearson versus graphical-lasso
+partial-correlation comparison at K=0.1%, and a Pearson-only usual-method
+reference at K=5%. It displays the graph matrices and the same four network
+measures for awake versus NREM/anesthesia in both analyses.
+
+Script `03` is visualization-only and does not refit the estimator. In an
+interactive editor, run its `# %%` cells to display the alpha-path, exact native
+support, degree-survival, and spatial-degree panels inline. All panels in
+script `01` also call `plt.show()` after saving.
 
 Tests:
 

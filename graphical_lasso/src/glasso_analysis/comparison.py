@@ -75,6 +75,122 @@ def exact_fixed_density(
     )
 
 
+def _trim_top_candidates(
+    rows: np.ndarray,
+    cols: np.ndarray,
+    weights: np.ndarray,
+    *,
+    n_keep: int,
+    n_nodes: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Keep exact strongest candidates, resolving ties by matrix order."""
+    absolute = np.abs(weights)
+    if weights.size > n_keep:
+        threshold = np.partition(absolute, weights.size - n_keep)[
+            weights.size - n_keep
+        ]
+        above = np.flatnonzero(absolute > threshold)
+        boundary = np.flatnonzero(absolute == threshold)
+        need = n_keep - above.size
+        if need < boundary.size:
+            boundary_keys = rows[boundary].astype(np.int64) * n_nodes + cols[boundary]
+            boundary = boundary[np.argsort(boundary_keys, kind="stable")[:need]]
+        chosen = np.concatenate((above, boundary))
+        rows = rows[chosen]
+        cols = cols[chosen]
+        weights = weights[chosen]
+
+    keys = rows.astype(np.int64) * n_nodes + cols
+    order = np.argsort(keys, kind="stable")
+    return rows[order], cols[order], weights[order]
+
+
+def exact_fixed_density_blockwise(
+    matrix: np.ndarray,
+    density: float,
+    *,
+    require_nonzero: bool = False,
+    support_tol: float = 1e-10,
+    block_rows: int = 256,
+) -> EdgeSelection:
+    """Exact fixed-density selection without materializing all pair values."""
+    values_matrix = np.asarray(matrix)
+    if values_matrix.ndim != 2 or values_matrix.shape[0] != values_matrix.shape[1]:
+        raise ValueError("matrix must be square")
+    if not 0 < density <= 1:
+        raise ValueError("density must be in (0, 1]")
+
+    n_nodes = values_matrix.shape[0]
+    n_possible = n_nodes * (n_nodes - 1) // 2
+    n_keep = max(1, min(int(np.floor(density * n_possible)), n_possible))
+    candidate_rows = np.empty(0, dtype=np.int32)
+    candidate_cols = np.empty(0, dtype=np.int32)
+    candidate_weights = np.empty(0, dtype=np.float64)
+    native_count = 0
+
+    for start in range(0, n_nodes - 1, block_rows):
+        stop = min(start + block_rows, n_nodes - 1)
+        row_ids = np.arange(start, stop, dtype=np.int32)
+        counts = n_nodes - row_ids - 1
+        block_rows_array = np.repeat(row_ids, counts)
+        block_cols_array = np.concatenate(
+            [np.arange(row + 1, n_nodes, dtype=np.int32) for row in row_ids]
+        )
+        block_weights = np.concatenate(
+            [np.asarray(values_matrix[row, row + 1 :]) for row in row_ids]
+        )
+        native_count += int(np.count_nonzero(np.abs(block_weights) > support_tol))
+
+        block_rows_array, block_cols_array, block_weights = _trim_top_candidates(
+            block_rows_array,
+            block_cols_array,
+            block_weights,
+            n_keep=n_keep,
+            n_nodes=n_nodes,
+        )
+        candidate_rows = np.concatenate((candidate_rows, block_rows_array))
+        candidate_cols = np.concatenate((candidate_cols, block_cols_array))
+        candidate_weights = np.concatenate(
+            (candidate_weights, block_weights.astype(np.float64, copy=False))
+        )
+        candidate_rows, candidate_cols, candidate_weights = _trim_top_candidates(
+            candidate_rows,
+            candidate_cols,
+            candidate_weights,
+            n_keep=n_keep,
+            n_nodes=n_nodes,
+        )
+
+    if require_nonzero and native_count < n_keep:
+        raise ValueError(
+            f"requested {n_keep} edges but matrix has only {native_count} nonzero edges"
+        )
+    if candidate_weights.size != n_keep:
+        raise RuntimeError("exact blockwise density selection failed")
+
+    data = np.ones(2 * n_keep, dtype=np.float64)
+    adjacency = csr_matrix(
+        (
+            data,
+            (
+                np.r_[candidate_rows, candidate_cols],
+                np.r_[candidate_cols, candidate_rows],
+            ),
+        ),
+        shape=(n_nodes, n_nodes),
+    )
+    return EdgeSelection(
+        adjacency=adjacency,
+        rows=candidate_rows,
+        cols=candidate_cols,
+        weights=candidate_weights,
+        threshold=float(np.min(np.abs(candidate_weights))),
+        requested_density=float(density),
+        realized_density=n_keep / n_possible,
+        native_density=native_count / n_possible,
+    )
+
+
 def edge_jaccard(first: EdgeSelection, second: EdgeSelection) -> float:
     """Jaccard overlap of two undirected edge selections."""
     n_nodes = first.adjacency.shape[0]

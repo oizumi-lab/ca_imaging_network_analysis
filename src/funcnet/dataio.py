@@ -231,6 +231,30 @@ def _decode_v2_mcos_atlas(path: Path, expected_count: int) -> list[str] | None:
     return decoded_candidates[0]
 
 
+def load_atlas_labels(path_or_name: str | Path) -> list[str] | None:
+    """Load row-aligned atlas labels without reading the activity matrices.
+
+    This lightweight path is useful for cohort inventories: the recording files
+    are large HDF5 containers, but their atlas annotation is a compact MATLAB
+    string payload. Returned labels retain the source layer suffix (for example,
+    ``"MOp2/3"``); visualization helpers decide how to display it.
+    """
+    path = _resolve_path(path_or_name)
+    with h5py.File(path, "r") as mat:
+        if "ROIs/atlas" not in mat:
+            return None
+        if "nonzero_ROI" in mat:
+            expected_count = int(mat["nonzero_ROI"].size)
+        elif "ROIs/Centroid" in mat:
+            centroid_size = int(mat["ROIs/Centroid"].size)
+            if centroid_size % 2:
+                raise ValueError(f"{path.name}: ROI centroid size is not divisible by 2")
+            expected_count = centroid_size // 2
+        else:
+            raise ValueError(f"{path.name}: cannot determine the number of ROI rows")
+    return _decode_v2_mcos_atlas(path, expected_count)
+
+
 def load_recording(path_or_name: str | Path) -> Recording:
     """Load one ``.mat`` recording into a :class:`Recording`.
 
@@ -283,7 +307,7 @@ def load_recording(path_or_name: str | Path) -> Recording:
         atlas = [str(a) for a in np.atleast_1d(atlas_raw).ravel()]
     if atlas is None:
         try:
-            atlas = _decode_v2_mcos_atlas(path, centroid.shape[0])
+            atlas = load_atlas_labels(path)
         except (KeyError, OSError, ValueError) as exc:
             warnings.warn(
                 f"Could not decode cortical-region labels from {path.name}: {exc}",
