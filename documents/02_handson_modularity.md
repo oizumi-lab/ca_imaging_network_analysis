@@ -1,119 +1,147 @@
-# Hands-on: functional-network modularity across brain states
+# Hands-on guide: state-dependent functional-network modularity
 
-A guided walkthrough for course attendees. Work through the `# %%` scripts in
-`scripts/` in order; this document explains the *why* behind each step and ties
-it back to the paper.
+This guide accompanies the numbered `# %%` scripts. The recommended course path
+uses one complete sleep recording so students see the original calcium data,
+synchronized EEG/EMG, state labels, and every network-analysis transformation.
 
-> Kiyooka & Oomoto et al. (2026), *Single-cell resolution functional networks
-> during unconsciousness are segregated into spatially intermixed modules*,
-> Cell Reports.
+## Learning goals
 
-## Big picture
+By the end of scripts 00--07, students should be able to:
 
-Neurons that fire together can be linked into a **functional network**. We ask
-how that network's *organisation* changes when the brain goes from awake to
-unconscious (sleep or anesthesia). The key quantity is **modularity** — the
-degree to which neurons split into well-separated functional modules.
+1. distinguish neural activity, functional connectivity, and a thresholded graph;
+2. explain why graph density must be matched across brain states;
+3. compute and interpret Louvain modularity Q;
+4. handle stochastic community detection with repeated optimization;
+5. compare Awake and NREM networks without treating time windows as mice;
+6. explain how spatial coarse-graining changes module geography; and
+7. modify one setting and interpret a short practice analysis in every script.
 
-The whole analysis is four steps:
+## Track A: one complete recording
 
-```
-activity (spikes)  →  correlation matrix  →  thresholded graph  →  modularity Q
-```
-
-## Setup
+### 00 — download the course data
 
 ```bash
 poetry install
-poetry run python scripts/download_data.py --example   # 84 MB, enough to start
+poetry run python scripts/00_download_data.py
 ```
 
-Run `poetry run python scripts/download_data.py` before `00_inspect_data.py`.
-That tutorial builds the complete ten-session inventory and loads all 7,843
-neurons in its representative `mouse01_sleep` session. The 84 MB subset remains
-useful for later quick validation exercises.
+The default download contains:
 
-Open scripts in VS Code (Python extension) or Spyder and run cell by cell
-(`# %%` markers). Each script saves its figures to `results/figures/`.
+- `mouse02_sleep.mat`: complete version-3 calcium recording (~1.09 GB);
+- `mouse02_sleep_physiological_data.mat`: synchronized EEG/EMG (~0.36 GB).
 
-## 1 · Inspect the data — `00_inspect_data.py`
+### 01 — inspect neural activity and state physiology
 
-First build an inventory of all ten recording sessions: ROI count, total frames,
-duration, and the proportion of every raw brain-state label. This includes awake,
-quiet awake, NREM, and REM in sleep files, and awake and anesthesia in anesthesia
-files. No paper-specific frame-selection mask is applied. The metadata-only scan
-shows the full dataset's scale without loading every multi-gigabyte activity
-matrix. Then inspect all 7,843 neurons in one full recording: its deconvolved
-event raster, `spike_smoothed` matrix (N neurons × T frames), per-frame brain
-`state`, and neuron `centroid`s. Calcium imaging is sampled at 7.65 Hz.
+Run `01_inspect_data.py` cell by cell. Confirm the dimensions and active-neuron
+count. The script first makes two standalone figures:
 
-**Concept to land:** the data are large-scale (thousands of neurons) and
-single-cell resolution — that's what makes single-cell network analysis possible.
+- full-session raw ΔF/F traces from 100 reproducibly selected neurons;
+- all neuron positions colored by layer-collapsed Allen cortical area.
 
-## 2 · Reproduce the reference — `01_reproduce_example.py`
+The third figure aligns:
 
-Before trusting our tools, we reproduce the dataset's own MATLAB example exactly
-and check each step (edge count, symmetry, modularity self-consistency). This is
-good scientific hygiene: *validate the pipeline on a known case first.* See
-`documents/01_reproduction_report.md`.
+- the all-neuron deconvolved-event raster;
+- the EEG spectrogram;
+- the EMG RMS envelope;
+- the deposited Wake / quiet-Wake / NREM / REM state labels.
 
-## 3 · Build a functional network — `10_functional_connectivity.py`
+The state panel is an inspection of physiological support for the deposited
+labels. It is not a newly fitted state classifier.
 
-- **Functional connectivity** = Pearson correlation between every neuron pair,
-  computed *separately per state* on matched 1500-frame windows.
-- Compare the correlation matrices and their distributions between awake and
-  unconscious states.
+### 02 — construct a functional network
 
-**Concept to land:** "connectivity" here is statistical (co-activity), not
-anatomical wiring.
+`02_functional_connectivity.py` takes matched 1,500-frame Awake and NREM windows.
+For each state it computes Pearson correlation between every selected neuron pair.
+The correlation is statistical co-activity, not anatomical connectivity.
 
-## 4 · Modularity — `20_modularity.py`
+The dense matrices are converted to graphs by retaining the strongest 5% of
+absolute correlations. Matching K guarantees the two graphs have the same edge
+count, even though Awake and NREM require different numerical correlation
+thresholds. This is the input needed for the modularity comparison in script 03.
+The unsolved exercise asks attendees to change K and check how the threshold and
+edge count respond.
 
-Three practical ideas, each a common pitfall if ignored:
+### 03 — estimate modular structure
 
-1. **Fix the density.** Keep the strongest *K %* of edges so two networks have
-   the same number of links. Otherwise a denser network looks more modular for
-   trivial reasons. The paper sweeps K from 0.8 % to 30 %.
-2. **Louvain is stochastic.** Run it many times and take the **max-Q** partition
-   (or a consensus). A single run is noisy.
-3. **Resolution γ.** Controls module size; report results across γ to show they
-   aren't a parameter artefact.
+`03_modularity.py` introduces modularity Q and Louvain community detection. The
+important practical points are:
 
-The **spatial module map** colours each neuron by module on the cortex. The
-paper's striking observation: at single-cell scale, modules are **spatially
-intermixed** — adjacent neurons often belong to different functional modules.
+- module labels are arbitrary identifiers;
+- Louvain is stochastic, so a single run is insufficient;
+- repeated runs provide a max-Q partition;
+- isolated nodes require the paper's giant-component initialization;
+- density K and resolution γ are analysis choices that should be checked.
 
-## 5 · The result — `30_state_comparison.py`
+The spatial maps demonstrate that functional modules can be intermixed across
+the cortex rather than forming contiguous anatomical regions.
 
-Put it together: compute max-Q modularity for each state across densities, for
-the sleep dataset (awake vs NREM) and the anesthesia dataset (awake vs
-anesthesia). The unconscious curve sits **above** the awake curve:
-**modularity increases during unconsciousness** at single-cell resolution.
+### 04 — compare states within the example mouse
 
-Interpretation: during sleep/anesthesia the cortical functional network
-fragments into more sharply segregated modules — a candidate signature of
-reduced information integration when consciousness is lost.
+`04_sample_state_comparison.py` repeats the pipeline across several complete
+Awake and NREM windows and across graph densities. Window-to-window variation
+is useful for method exploration, but the windows share one animal and are not
+independent biological replicates.
 
-## Where to go next (future course modules)
+### 05 — rebuild networks after spatial coarse-graining
 
-- **Spatial scale (coarse-graining).** Group neurons spatially and recompute Q;
-  the paper finds the state difference is specific to the single-cell scale and
-  vanishes at the mesoscale (Fig. 7).
-- **Per-neuron contribution $Q_i$** and its relation to node degree (Fig. 4).
-- **Temporal module stability** and consensus partitions (Fig. 6).
+`05_sample_coarse_grain_modularity.py` groups nearby neurons into parcels of
+1, 2, 5, 10, 20, or 40 neurons. Parcel signals are averaged first, and then the
+correlation graph and modularity are recomputed from scratch at every scale.
 
-## Cheat-sheet (the library API)
+### 06 — compare module geography across scales
 
-```python
-import os, sys
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src.funcnet import dataio, network as net
+`06_sample_module_spatial_distribution.py` contrasts single-cell and 40-neuron
+parcel maps. It also plots the probability that two nodes share a module versus
+their cortical distance.
 
-rec  = dataio.load_recording("mouse07_ane")      # v2.0 loader
-X    = dataio.activity(rec, "anesthesia",        # (N, n_frames) for a state
-                       nonzero_only=True)
-C    = net.correlation_matrix(X)                 # functional connectivity
-adj, thr = net.density_threshold(C, K=0.05)      # fixed-density graph
-res  = net.repeat_louvain(adj, gamma=1.0, n_runs=200)
-print(res["Q_max"], res["n_modules_max"])        # robust modularity
+### 07 — animate the multiscale transition
+
+`07_multiscale_module_movie.py` computes partitions at seven scales, aligns the
+otherwise arbitrary module colors across neighboring scales, saves a static
+overview, and renders an MP4 movie.
+
+### Practice analyses
+
+Each core script ends with an unsolved exercise prompt. Solution code is
+deliberately omitted: early exercises can be written by adapting nearby cells,
+while later extensions are suitable for carefully checked AI assistance.
+
+1. **Easy:** compare average activity between Awake and NREM;
+2. **Easy:** change graph density and inspect edge counts and thresholds;
+3. **Easy–intermediate:** change resolution and inspect the module count;
+4. **Intermediate:** calculate state contrast across densities;
+5. **Intermediate:** find where the spatial-scale contrast is smallest;
+6. **Intermediate–advanced:** construct a module-localization contrast; and
+7. **Advanced, AI-assisted:** extend the multiscale comparison to both states.
+
+## Track B: reproduce population-level paper results
+
+Students using the dataset for projects should first download every recording:
+
+```bash
+poetry run python scripts/00_download_data.py --all
 ```
+
+Then run:
+
+1. `08_all_mice_modularity.py` — all sleep and anesthesia recordings;
+2. `09_all_mice_coarse_grain_modularity.py` — modularity across spatial scales;
+3. `10_all_mice_module_spatial_distribution.py` — module geography and distance profiles.
+
+Mouse 4 has two sleep recording days. The scripts average those days within the
+same biological mouse before cohort summaries, preventing that mouse from
+receiving twice the inferential weight.
+
+For an exploratory run, retain the default teaching-sized settings. For the
+full-neuron, 200-Louvain-run workflow, set `PAPER_MODE = True`. Expect long run
+times and substantial memory use.
+
+## Interpretation boundaries
+
+- Fixed graph density controls edge count, not every activity-statistics confound.
+- Functional edges do not imply direct synaptic connections.
+- A high Q describes segregation relative to the modularity null model.
+- Window-level points quantify within-recording variability, not population n.
+- Confidence intervals that include zero do not establish equivalence.
+- Coarse-grained calcium parcels are a controlled spatial-scale analysis, not a
+  literal model of EEG or fMRI measurements.

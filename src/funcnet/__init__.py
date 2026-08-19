@@ -1,7 +1,7 @@
-"""funcnet — functional-network analysis for the RIKEN v2.0 calcium-imaging dataset.
+"""funcnet — functional-network analysis for the RIKEN version-3 dataset.
 
 Hands-on toolkit for the neural-data-analysis course: loading and preparing the
-v2.0 dataset, visualizing population activity, and computing functional-network
+version-3 dataset, visualizing population activity, and computing functional-network
 measures across wakefulness, sleep, and anesthesia.
 
 Typical use (scripts in scripts/ add the repo root to the path)::
@@ -29,14 +29,12 @@ from . import (
     dataio,
     network,
     paths,
-    smallworld,
     timeseries,
 )
 
 _LAZY_MODULES = {
     "coarsegrain",
     "physiology",
-    "rastermap_tools",
     "statistics",
     "visualization",
 }
@@ -61,8 +59,6 @@ __all__ = [
     "network",
     "paths",
     "physiology",
-    "rastermap_tools",
-    "smallworld",
     "statistics",
     "timeseries",
     "visualization",

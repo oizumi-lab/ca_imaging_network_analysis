@@ -1,23 +1,19 @@
 [project]
 name = "ca-imaging-network-analysis"
 version = "0.1.0"
-description = "Hands-on materials for state-dependent functional network analysis of two-photon calcium imaging data across wakefulness, sleep, and anesthesia (RIKEN dataset 20260409-001 v2.0; Kiyooka & Oomoto et al., Cell Reports 2026)."
+description = "Hands-on materials for state-dependent functional network analysis of version-3 two-photon calcium imaging and EEG/EMG data across wakefulness, sleep, and anesthesia (Kiyooka & Oomoto et al., Cell Reports 2026)."
 authors = [{ name = "Masafumi Oizumi", email = "c-oizumi@g.ecc.u-tokyo.ac.jp" }]
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy (>=1.26,<2.0)",
     "scipy (>=1.13,<2.0)",
-    "pandas (>=2.2,<3.0)",
     "matplotlib (>=3.9,<4.0)",
     "h5py (>=3.11,<4.0)",
     "pymatreader (>=1.0,<2.0)",
     "bctpy (>=0.6,<0.7)",
-    "networkx (>=3.3,<4.0)",
     "tqdm (>=4.66,<5.0)",
     "requests (>=2.32,<3.0)",
-    "pydmd (>=2025.8.1,<2026.0.0)",
-    "rastermap (==1.0)",
 ]
 
 [tool.poetry]
@@ -27,8 +23,7 @@ package-mode = false
 ipykernel = "^6.29"
 jupytext = "^1.16"
 ruff = "^0.6"
-python-igraph = "^1.0.0"
-python-louvain = "^0.16"
+python-pptx = "^1.0"
 
 [build-system]
 requires = ["poetry-core>=2.0"]

@@ -36,7 +36,7 @@ def synthetic_recording(
 
 
 def packed_string_payload(labels: list[str]) -> np.ndarray:
-    """Build the compact v2 MCOS stream used by the atlas decoder."""
+    """Build the compact MCOS stream used by the atlas decoder."""
     lengths = np.array([len(label.encode("utf-16le")) // 2 for label in labels])
     encoded = "".join(labels).encode("utf-16le")
     encoded += b"\0" * (-len(encoded) % 8)

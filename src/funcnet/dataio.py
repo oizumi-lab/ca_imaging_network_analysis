@@ -1,20 +1,11 @@
-"""Loader for the RIKEN v2.0 two-photon calcium-imaging dataset.
+"""Loader for the RIKEN version-3 calcium-imaging course dataset.
 
-Dataset: "Single-cell calcium imaging dataset of large-scale neuronal activity
-across wakefulness, sleep, and anesthesia" (RIKEN neurodata 20260409-001, v2.0;
-Kiyooka & Oomoto et al., Cell Reports 2026).
-
-Why this module exists
-----------------------
-The published analysis code (https://github.com/oizumi-lab/mouse_network_2P) was
-written for dataset **v1.0**. The current **v2.0** release renamed several
-variables and reorganised the structure. This module hides those differences
-behind one clean ``Recording`` object so the rest of the project never has to
-think about MATLAB internals.
+The loader exposes each recording through one clean ``Recording`` object so the
+course analyses do not have to handle MATLAB storage details directly.
 
 Two gotchas this module handles for you
 --------------------------------------
-1. The ``.mat`` files are **MATLAB v7.3 (HDF5)**. ``scipy.io.loadmat`` CANNOT read
+1. The ``.mat`` files are **MATLAB v7.3 (HDF5)**. ``scipy.io.loadmat`` cannot read
    them (it only supports <= v7.2), despite what the dataset README says. We use
    ``pymatreader`` instead, which decodes v7.3, transposes arrays back to MATLAB
    orientation (so matrices come out ``N x T`` as documented), and turns structs
@@ -22,19 +13,6 @@ Two gotchas this module handles for you
 2. ``frame.used_frame`` / ``frame.boundary_ind`` are stored as **MATLAB 1-based**
    frame indices. We convert them to **0-based** so they can index NumPy arrays
    directly.
-
-v1 -> v2 variable mapping
--------------------------
-    smoothed_spike   -> spike_smoothed
-    spike            -> spike_deconv
-    dFF              -> dFF              (unchanged)
-    atlasID (+ st)   -> ROIs.atlas       (region-acronym strings)
-    x_coord/y_coord  -> ROIs.Centroid    (N x 2, pixels; 1.465 um/px)
-    used_frame{1/2}  -> frame.used_frame{1,1}=awake, {1,2}=NREM or anesthesia
-    boundary_ind     -> frame.boundary_ind
-    SleepState       -> state            (1 x T)
-    (separate files) -> data_info        ('sleep' | 'ane')
-    (n/a)            -> nonzero_ROI       (activity filter used in the paper)
 
 ``ROIs.atlas`` is a MATLAB *string-class* array stored through an MCOS payload.
 ``pymatreader`` does not decode that object, so this loader reads the compact
@@ -68,7 +46,7 @@ ANE_STATE_CODES = {0.0: "awake", 1.0: "anesthesia"}
 
 @dataclass
 class Recording:
-    """A single recording session with v2.0 variables exposed by clean names.
+    """A single recording session with version-3 variables exposed by clean names.
 
     All time-series matrices are ``(n_neurons, n_frames)`` and row-aligned:
     row ``i`` is the same neuron in ``dFF``, ``spike_deconv``, ``spike_smoothed``,
@@ -159,7 +137,7 @@ def _decode_mcos_string_payload(
     payload: np.ndarray,
     expected_count: int,
 ) -> list[str]:
-    """Decode the packed MATLAB-v2 string payload used by ``ROIs.atlas``.
+    """Decode the packed MATLAB string payload used by ``ROIs.atlas``.
 
     The dataset stores ``[1, 2, N, 1]``, followed by ``N`` UTF-16 code-unit
     lengths and then four little-endian UTF-16 units per uint64 word. Keeping
@@ -195,7 +173,7 @@ def _decode_mcos_string_payload(
     return labels
 
 
-def _decode_v2_mcos_atlas(path: Path, expected_count: int) -> list[str] | None:
+def _decode_mcos_atlas(path: Path, expected_count: int) -> list[str] | None:
     """Locate and decode the unique MCOS string payload for ``ROIs.atlas``."""
     with h5py.File(path, "r") as mat:
         if "ROIs/atlas" not in mat:
@@ -252,7 +230,7 @@ def load_atlas_labels(path_or_name: str | Path) -> list[str] | None:
             expected_count = centroid_size // 2
         else:
             raise ValueError(f"{path.name}: cannot determine the number of ROI rows")
-    return _decode_v2_mcos_atlas(path, expected_count)
+    return _decode_mcos_atlas(path, expected_count)
 
 
 def load_recording(path_or_name: str | Path) -> Recording:
@@ -262,7 +240,7 @@ def load_recording(path_or_name: str | Path) -> Recording:
     ----------
     path_or_name
         A path to a ``.mat`` file, or a recording name such as
-        ``"mouse01_sleep"`` / ``"example_data"`` (resolved under data/raw).
+        A recording stem such as ``"mouse01_sleep"`` (resolved under data/raw).
     """
     path = _resolve_path(path_or_name)
 
@@ -298,7 +276,7 @@ def load_recording(path_or_name: str | Path) -> Recording:
     }
 
     # Future pymatreader versions may decode the string array directly. Prefer
-    # that result when available; otherwise use the v2 MCOS payload decoder.
+    # that result when available; otherwise use the MCOS payload decoder.
     atlas_raw = rois.get("atlas")
     atlas = None
     if isinstance(atlas_raw, (list, np.ndarray)) and np.size(atlas_raw) and not (
@@ -440,9 +418,10 @@ def activity(
     return X
 
 
-def list_recordings(include_example: bool = False) -> list[str]:
-    """Recording names available under data/raw (sorted)."""
-    names = sorted(p.stem for p in RAW_DIR.glob("*.mat"))
-    if not include_example:
-        names = [n for n in names if n != "example_data"]
-    return names
+def list_recordings() -> list[str]:
+    """Sleep and anesthesia recording names available under data/raw."""
+    return sorted(
+        p.stem
+        for p in RAW_DIR.glob("*.mat")
+        if "_sleep" in p.stem or p.stem.endswith("_ane")
+    )

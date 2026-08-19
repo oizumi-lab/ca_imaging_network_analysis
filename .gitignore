@@ -12,7 +12,10 @@ __pycache__/
 # --- raw_documents (large)
 raw_documents/
 
-# --- Data (large; downloaded separately, see scripts/download_data.py) ---
+# --- Large source talk (kept locally as a design/content reference) ---
+/documents/CSHA_082426.pptx
+
+# --- Data (large; downloaded separately, see scripts/00_download_data.py) ---
 data/
 
 # --- Generated results (figures, csv, ...) ---

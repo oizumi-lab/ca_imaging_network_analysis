@@ -1,134 +1,71 @@
 # CLAUDE.md — ca_imaging_network_analysis
 
-## What this project is
+## Purpose
 
-Hands-on teaching materials for a **neural-data-analysis course in China**.
-Lecture topic: **state-dependent functional networks** — comparing the functional
-network of the cortex across brain states (**awake, sleep, anesthesia**).
+Hands-on materials for the CSHA 2026 Neural Data Science course. The teaching
+topic is state-dependent functional-network modularity in wide-field two-photon
+calcium imaging, based on Kiyooka & Oomoto et al. (Cell Reports, 2026).
 
-The first deliverable is a **modularity** hands-on that reproduces, then teaches,
-the analysis in:
+## Teaching workflow
 
-> Kiyooka & Oomoto et al. (2026). *Single-cell resolution functional networks
-> during unconsciousness are segregated into spatially intermixed modules.*
-> **Cell Reports.** https://doi.org/10.1016/j.celrep.2025.116902
+- Scripts 00--07 use the complete `mouse02_sleep` calcium recording and its
+  synchronized EEG/EMG recording.
+- Scripts 08--10 require all calcium recordings and reproduce all-mice
+  modularity and spatial-scale comparisons.
 
-- Reference MATLAB code: https://github.com/oizumi-lab/mouse_network_2P
-- Dataset (RIKEN 20260409-001, **v2.0**, CC-BY 4.0): https://neurodata.riken.jp/id/20260409-001
-- Mirror: Zenodo https://doi.org/10.5281/zenodo.17667863
+Run the scripts in numeric order. Scripts 01--10 are interactive `# %%` files
+for VS Code or Spyder. Reusable logic belongs under `src/funcnet/`; settings,
+narrative cells, and figure composition remain in `scripts/`.
 
 ## Repository layout
 
-```
-.claude/        project rules & shared settings
-src/funcnet/    reusable package, organized by broad domain:
-                dataio.py (loading/state/neuron selection)
-                timeseries.py (windows/segments/shuffles/smoothing)
-                visualization.py (display preparation + plotting)
-                network.py and smallworld.py (network measures/workflows)
-                coarsegrain.py (spatial parcels + spatial module measures)
-                statistics.py (general summaries), paths.py (project paths)
-data/raw/       the 11 downloaded .mat recordings  (gitignored, ~11 GB)
-scripts/        Python entry-point scripts (import from src.funcnet)
-  download_data.py            fetch the dataset into data/raw/
-  00_inspect_data.py          explore one recording
-  01_reproduce_example.py     faithful port of the dataset's example_network_analysis.m
-  02_visualization_activity.py  full-session ΔF/F timelines and spike rasters
-  10_functional_connectivity.py
-  20_modularity.py
-  30_state_comparison.py      the lecture result (modularity awake vs sleep/ane;
-                              per-mouse scatter reproducing the talk slide)
-  40_small_world.py           path length, clustering, small-world-ness / SWP
-  50_coarse_grain_modularity.py  mesoscale modularity across spatial scales (paper Fig. 7 B–F)
-  60_module_spatial_distribution.py  where modules sit: single-cell (intermixed) vs mesoscale
-                              (localized) — paper Fig. 5A–C/G/H + Fig. 7F/G/H
-  70_multiscale_module_movie.py  movie of module geography across no averaging and
-                              2/5/10/20/30/40-neighbor spatial coarse-graining
-verification/   library cross-checks & method controls (not part of the teaching sequence)
-  50_verify_modularity.py     cross-check modularity vs NetworkX / bctpy / igraph / python-louvain
-  51_verify_smallworld.py     cross-check clustering / path length / SWP vs NetworkX / bctpy
-  shuffle_null_control.py     do awake-vs-unconscious Q/C/L differences survive circular-shift shuffling?
-                              (raw-vs-null per state; L/Q genuine, C confounded)
-  smallworld_shuffle_corrected.py  same shuffle control for the small-world measures (C, L, SWP at K=1%)
-  shuffle_investigation.py    shared per-recording cache of real+shuffle Q/C/L and marginals (→results/cache/)
-  why_QL_robust_C_confounded.py    OQ1: why the shuffle confounds C (~56%) but not Q (~18%) or L (~4%)
-  state_difference_cause.py   OQ2: the C confound is driven by temporal sparsity (fraction of near-silent
-                              neurons predicts it, event-count-matched model reproduces it), not coupling
-  sparsity_clustering_mechanism.py  gap-free derivation of why sparsity raises C: single-coincidence law
-                              r~1/sqrt(n_i n_j) → single-frame-dominated correlations → per-frame coincidence
-                              -cliques (+ the smoothing floor); confirmed on the real shuffle graph
-references/     paper/dataset README, Figure_guide, original MATLAB example
-documents/      written walkthrough + reproduction report
-results/        generated outputs — results/figures/ etc. (gitignored)
-logs/           run logs (downloads, long jobs)
+```text
+scripts/          00--10 course and research-extension workflow
+src/funcnet/      data I/O, physiology, time windows, networks, coarse-graining,
+                  statistics, plotting, and project paths
+tests/            data-free regression tests
+documents/        written hands-on guide and slide-deck builder
+references/       deposited dataset documentation and source links
+data/raw/         downloaded recordings (gitignored)
+results/          generated figures, CSVs, and movies (gitignored)
 ```
 
-## Conventions
+The earlier broad research repository is preserved in branch
+`archive/full-analysis-2026` and tag `full-analysis-2026-08-18`.
 
-- **Hands-on scripts are interactive `# %%` cell scripts** (VS Code / Spyder),
-  **not** `.ipynb`. Write their tutorial workflow as sequential executable
-  cells with editable settings; do not wrap it in `main()` or a command-line
-  entry point unless the user explicitly asks for one. Reusable logic goes in
-  the broad domain modules under `src/funcnet/`; tutorial-specific settings,
-  orchestration, and teaching cells remain in `scripts/`. Avoid an
-  undifferentiated `utils.py`.
-- **Imports:** the package is **not** installed into the venv. Scripts add the
-  repo root to the path (anchored to the file, so it works from any working
-  directory) and import it by its explicit location, so it is obvious where the
-  code lives:
-  ```python
-  import os, sys
-  # add the repo root (parent of scripts/) so `src.funcnet` is importable
-  sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-  from src.funcnet import dataio, network as net
-  from src.funcnet.paths import FIG_DIR
-  ```
-- **Outputs go to `results/`** (e.g. `from src.funcnet.paths import FIG_DIR`).
-  Don't write generated files into `scripts/`.
-- English for all materials.
-- `data/`, `.venv/`, and `results/` are gitignored. Don't commit data or the venv.
+## Data
 
-## Environment
-
-- **pyenv** local: Python **3.12.13** (`.python-version`).
-- **Poetry** with in-project venv → `./.venv` (`poetry.toml`).
+Default course download:
 
 ```bash
-poetry install                         # create .venv, install deps
-poetry run python scripts/download_data.py            # get data (~11 GB)
-poetry run python scripts/download_data.py --example  # just the 84 MB sample
-poetry run python scripts/01_reproduce_example.py     # validate the port
+poetry run python scripts/00_download_data.py
 ```
 
-Key deps: numpy, scipy, pandas, matplotlib, **h5py**, **pymatreader** (reads the
-v7.3/HDF5 `.mat` files), **bctpy** (`community_louvain` etc.), networkx, tqdm,
-requests.
+All data for scripts 08--10:
 
-## Critical data-format note (v1 → v2)
+```bash
+poetry run python scripts/00_download_data.py --all
+```
 
-The MATLAB repo targets dataset **v1.0**; we use **v2.0**, which renamed
-variables AND stores `.mat` files as **MATLAB v7.3 (HDF5)**. Consequences:
+The course uses dataset version 3. MATLAB v7.3 files must be read with
+`pymatreader`/`h5py`, not `scipy.io.loadmat`. The loader also converts MATLAB
+indices for direct NumPy use.
 
-- `scipy.io.loadmat` **cannot** read these files — use `pymatreader` (already
-  wired into `src/funcnet/dataio.py`).
-- Variable renames and 1-based→0-based frame indices are handled by the loader.
-  Full mapping: see `.claude/rules/dataset-v2-format.md`.
-- `ROIs.atlas` (region labels) is a MATLAB *string-class* object that neither
-  pymatreader nor h5py decode; it is exposed as `None`. Not needed for the
-  single-cell modularity hands-on.
+## Core conventions
 
-## Status
+- English for all course materials.
+- Outputs go under `results/`; scripts never write generated files beside code.
+- Compare states using identical neuron rows and equal graph density.
+- Louvain analyses repeat stochastic optimization and report the max-Q partition.
+- Windows are nested within recordings; biological inference is summarized by mouse.
+- Keep course defaults tractable and expose `PAPER_MODE` for long full-neuron runs.
 
-- [x] Project scaffold, env, data download
-- [x] v2.0 loader + network/modularity library
-- [x] Faithful reproduction of `example_network_analysis.m` (validated)
-- [x] Modularity hands-on scripts (00/01/10/20/30)
-- [x] Small-world hands-on (40): path length, clustering, SWP (ports SWP/ from oizumi-lab/mouse_network)
-- [x] Library cross-checks (verification/50/51): custom measures validated against NetworkX / bctpy / igraph / python-louvain
-- [x] Mesoscale coarse-graining (script 50): paper Fig. 7 B–F (modularity vs spatial scale)
-- [x] Spatial distribution of modules (script 60): Fig. 5 A–C/G/H + Fig. 7 F/G/H (intermixed vs localized)
-- [x] Multi-scale module movie (script 70): no averaging through 40-neighbor coarse-graining
-- [x] Shuffle-null confound investigation (verification/): L/Q genuine, C/SWP confounded; C confound driven
-      by temporal sparsity — most neurons near-silent, so chance coincidences form per-frame cliques
-      (mechanism derived + adversarially verified; OQ1/OQ2 resolved; documents/04)
-- [ ] Future analyses (per-neuron Qi, module stability, distance–activity-correlation Fig. 7 I–L)
+## Environment and checks
+
+Python 3.12 with Poetry and an in-project `.venv`.
+
+```bash
+poetry install
+poetry run python -m unittest discover -s tests -v
+poetry run ruff check src/funcnet scripts tests
+```
