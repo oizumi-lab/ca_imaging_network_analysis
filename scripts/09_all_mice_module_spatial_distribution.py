@@ -1,7 +1,11 @@
 # %% [markdown]
-# # 10 · Module spatial distribution across all mice
+# # 09 · Module spatial distribution across all mice
 #
-# This tutorial pulls together the paper's central **multi-scale** message about
+# ## Where this script fits
+# Script 08 showed that modularity Q changes with spatial scale. Q alone does not
+# reveal whether a module occupies one cortical patch or is mixed among other
+# modules. This script adds spatial coordinates and pulls together the paper's
+# central **multi-scale** message about
 # *where* modules sit in cortex:
 #
 # - **Single-cell scale** (Kiyooka et al. **Fig. 5**): functional modules are
@@ -19,6 +23,14 @@
 # - **Fig. 5G,H** & **Fig. 7G,H** — the **proportion of node pairs in the same
 #   module vs. cortical distance**, per mouse, awake vs. NREM (G) and awake vs.
 #   anesthesia (H). Flat curves ⇒ intermixed; decreasing curves ⇒ localized.
+#
+# The workflow reuses the same network definition as the earlier scripts and
+# adds one spatial summary:
+#
+# ```text
+# activity → equal-density graph → modules → cortical coordinates
+#          → same-module probability within distance bins
+# ```
 #
 # Method (matching the paper): correlation → ``|r|`` density threshold at
 # **K = 0.05** → **max-Q** Louvain (γ = 1) over ``N_RUNS`` iterations. Distances
@@ -52,7 +64,8 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
 # ## Settings
-# Light defaults so the whole script runs in a few minutes. **To reproduce the
+# The defaults limit neuron count, windows, and Louvain repetitions so the
+# workflow can be inspected before a full run. **To reproduce the
 # paper more fully:** set ``MAX_NEURONS = None`` (all active neurons), raise
 # ``N_RUNS`` toward 200, and ``N_WINDOWS`` for smoother per-mouse curves.
 
@@ -103,7 +116,7 @@ def prepare(name, subsample=True):
 
 
 # %% [markdown]
-# ## Part 1 — example module-assignment maps (Fig. 5A–C and Fig. 7F)
+# ## Step 1 — inspect example module-assignment maps (Fig. 5A–C and Fig. 7F)
 # Each dot is a node (neuron for single-cell, parcel for mesoscale) at its
 # cortical position, coloured by its module. Top row: single-cell modules are
 # **spatially intermixed**. Bottom row: mesoscale modules form **contiguous
@@ -171,12 +184,12 @@ for ax in (axes[0, 0], axes[1, 0]):   # re-enable the y-label we use as a row he
 fig.suptitle("Module assignment maps: single-cell modules are intermixed, "
              "mesoscale modules are localized", y=1.0, fontsize=13)
 fig.tight_layout()
-fig.savefig(FIG_DIR / "10_all_mice_module_maps.png", dpi=140, bbox_inches="tight")
+fig.savefig(FIG_DIR / "09_all_mice_module_maps.png", dpi=140, bbox_inches="tight")
 plt.show()
 
 
 # %% [markdown]
-# ## Part 2 — same-module proportion vs cortical distance (Fig. 5G,H and Fig. 7G,H)
+# ## Step 2 — quantify same-module proportion versus distance (Fig. 5G,H and Fig. 7G,H)
 # For every recording and state we compute, at both scales, the fraction of node
 # pairs in the same module within each 500-µm distance bin, averaged over windows.
 # We then aggregate per mouse (pooling mouse 4's two days).
@@ -266,7 +279,7 @@ axes[1, 1].set_title("(Fig. 7H) mesoscale — Awake vs Anesthesia")
 fig.suptitle("Same-module proportion vs distance: flat at single-cell (intermixed), "
              "decreasing at the mesoscale (localized)", y=1.0, fontsize=13)
 fig.tight_layout()
-fig.savefig(FIG_DIR / "10_all_mice_same_module_vs_distance.png", dpi=140, bbox_inches="tight")
+fig.savefig(FIG_DIR / "09_all_mice_same_module_vs_distance.png", dpi=140, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -284,3 +297,18 @@ plt.show()
 # The farthest-distance bins contain fewer pairs and sometimes rebound, so these
 # profiles are descriptive until accompanied by pair counts, spatial/label nulls,
 # and partition-stability uncertainty.
+
+# %% [markdown]
+# ## Practice — summarize the distance dependence
+#
+# For each biological mouse, calculate a localization contrast equal to the
+# value in the nearest distance bin minus the value in the farthest finite bin.
+# Do this separately for the single-cell and parcel scales, then display the
+# mouse-level values in a paired plot.
+#
+# Explain what a positive contrast means and why you should inspect the number of
+# node pairs in the farthest bin before interpreting a large value.
+#
+# **Where to start:** ``per_mouse_profiles`` returns one distance curve per
+# biological mouse. Check for finite values before choosing the final bin, and
+# keep sleep and anesthesia cohorts separate.

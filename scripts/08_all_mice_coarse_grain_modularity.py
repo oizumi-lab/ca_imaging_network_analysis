@@ -1,14 +1,16 @@
 # %% [markdown]
-# # 09 · Mesoscale modularity across all mice (paper Fig. 7)
+# # 08 · Mesoscale modularity across all mice (paper Fig. 7)
 #
-# Scripts 03/08 measured modularity at **single-cell** resolution and found it
+# ## Where this script fits
+# Scripts 03 and 07 measured modularity at **single-cell** resolution and found it
 # **higher during unconsciousness**, with modules **spatially intermixed**
 # (Fig. 5). Figure 7 asks the complementary question: **at what spatial scale
 # does that picture change?** We spatially **coarse-grain** the neurons into
 # parcels of increasing size, rebuild the functional network between *parcels*,
 # and track modularity as a function of scale.
 #
-# **Pipeline** (port of `oizumi-lab/mouse_network`, Fig. 7):
+# The key rule is to rebuild the network from parcel activity at every scale. The
+# analysis pipeline (a port of `oizumi-lab/mouse_network`, Fig. 7) is:
 # for each parcel size `nnei ∈ {1, 2, 5, 10, 20, 40, 80, 160}`:
 # 1. group every `nnei` neighbouring neurons into one **parcel**
 #    (`coarsegrain.close_clustering`, a deterministic greedy spatial grouping);
@@ -58,7 +60,8 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
 # ## Settings
-# Defaults are kept light so the script runs in a few minutes. The heavy scale is
+# The default settings use a limited neuron count, window count, and number of
+# Louvain repetitions. The most time-consuming scale is
 # `nnei = 1` (thousands of nodes); coarser scales shrink the graph and run fast.
 # **To reproduce the paper more fully:** set `MAX_NEURONS = None`, raise `N_RUNS`
 # toward 200, and raise `N_WINDOWS`. Subsampling can change both absolute Q and
@@ -137,8 +140,8 @@ def run_dataset(recs, kind):
 
 
 # %% [markdown]
-# ## Compute across all recordings and scales
-# The heavy cell (a few minutes). `nnei = 1` dominates the cost; coarser scales
+# ## Step 1 — compute every recording at every scale
+# This cell may take several minutes. `nnei = 1` dominates the cost; coarser scales
 # are quick because the parcel network is small.
 
 # %%
@@ -147,7 +150,7 @@ ane_data = run_dataset(ANE_RECS, "ane")
 
 
 # %% [markdown]
-# ## Aggregate per mouse
+# ## Step 2 — aggregate recordings into biological mice
 # Each mouse's value at a scale is the mean over its windows (and, for mouse 4,
 # over both days), matching the paper's per-mouse averaging.
 
@@ -174,11 +177,13 @@ ane_mice, ane_aw, ane_un = per_mouse_means(ane_data, ANE_MOUSE, "anesthesia")
 
 
 # %% [markdown]
-# ## Figure 1 — modularity vs spatial scale (panels B–E)
+# ## Step 3 — plot modularity and its paired state contrast (panels B–E)
 # Left column: modularity of both states per scale (awake ×, unconscious ○, with
 # mean lines). Right column: the awake−unconscious modularity **difference** with
-# its 95 % CI. The contrast may weaken, reverse, or become imprecise as the graph
-# shrinks; CI overlap with zero is not an equivalence test.
+# its 95% confidence interval. The interval describes uncertainty in the mean
+# paired difference across mice. If it includes zero, these data do not resolve
+# the sign of the mean difference at that scale; this is not proof that the two
+# states are equivalent.
 
 # %%
 def plot_modularity_scale(ax, awake_mat, unc_mat, unc_label, unc_color):
@@ -222,12 +227,12 @@ axes[1, 1].set_title(f"(E) modularity difference  (n = {len(ane_mice)} mice)")
 fig.suptitle("Mesoscale modularity across spatial scales — state contrast and uncertainty",
              y=1.01, fontsize=13)
 fig.tight_layout()
-fig.savefig(FIG_DIR / "09_all_mice_coarse_grain_modularity.png", dpi=140, bbox_inches="tight")
+fig.savefig(FIG_DIR / "08_all_mice_coarse_grain_modularity.png", dpi=140, bbox_inches="tight")
 plt.show()
 
 
 # %% [markdown]
-# ## Figure 2 — example module maps at nnei = 40 (panel F)
+# ## Step 4 — inspect example module maps at nnei = 40 (panel F)
 # Each dot is a parcel at its centroid, coloured by its module. At the mesoscale,
 # modules are **spatially localized** (contiguous patches) in every state — unlike
 # the spatially intermixed single-cell modules of Figure 5.
@@ -235,10 +240,8 @@ plt.show()
 # These maps use the paper's Fig. 7 method: the **max-Q partition among 200
 # Louvain iterations** (STAR Methods; "we executed it 200 times ... and selected
 # the partition with the highest Q") on **all active neurons** (no subsample).
-# The intermixed-looking map in an earlier draft came from using too few
-# iterations (10) — with the paper's 200 the max-Q partition is well optimized
-# and spatially localized. (The paper's *supplementary* Fig. DS1-24 repeats this
-# with consensus clustering; set ``USE_CONSENSUS = True`` to reproduce that.)
+# The paper's *supplementary* Fig. DS1-24 repeats this with consensus clustering;
+# set ``USE_CONSENSUS = True`` to reproduce that variant.
 # The **localization index** annotated on each panel is how much more often a
 # parcel's spatially nearest neighbour shares its module than chance (> 1 = localized).
 
@@ -301,7 +304,7 @@ fig.suptitle(f"(F) Spatial distribution of coarse-grained modules  "
              f"{'consensus' if USE_CONSENSUS else f'max-Q of {FMAP_N_RUNS} runs'})"
              f" — modules are spatially localized", y=1.02, fontsize=13)
 fig.tight_layout()
-fig.savefig(FIG_DIR / "09_all_mice_coarse_grain_modules.png", dpi=140, bbox_inches="tight")
+fig.savefig(FIG_DIR / "08_all_mice_coarse_grain_modules.png", dpi=140, bbox_inches="tight")
 plt.show()
 
 
@@ -324,8 +327,21 @@ for name, aw, un in [("SLEEP (awake−NREM)", sleep_aw, sleep_un),
 # %% [markdown]
 # ## Takeaway
 # At the **single-cell** scale the unconscious network is more modular (scripts
-# 03/08). At modest coarse-graining the contrast weakens and its interval first
+# 03/07). At modest coarse-graining the contrast weakens and its interval first
 # overlaps zero, while modules become **spatially localized**. At the coarsest
 # scales only a handful of parcels/edges remain, and the contrast can reverse;
 # those estimates are discrete and unstable. The scale dependence is therefore
 # descriptive rather than proof that the state effect vanishes (Fig. 7).
+
+# %% [markdown]
+# ## Practice — relate parcel size to graph size
+#
+# For one recording, create a table containing ``nnei``, the number of parcels,
+# and the number of possible undirected parcel pairs at each scale. Plot parcel
+# count against ``nnei`` and explain why the coarsest modularity estimates may be
+# less stable even though those graphs run quickly.
+#
+# **Where to start:** ``recording_measures`` already prints the parcel count as
+# each scale is constructed. For ``n`` nodes, the number of possible undirected
+# pairs is ``n * (n - 1) / 2``. Write your work in a separate cell; do not replace
+# the supplied cohort analysis.

@@ -17,7 +17,7 @@
 #
 # Each point is a time window from one recording, not an independent mouse. This
 # lets us examine within-recording consistency, but it is not a population test.
-# Script 08 performs the biological-replicate comparison across mice.
+# Script 07 performs the biological-replicate comparison across mice.
 
 # %%
 import csv
@@ -49,7 +49,16 @@ N_RUNS = 10
 GAMMA = 1.0
 
 # %% [markdown]
-# ## Compute Q for every selected window and density
+# ## Step 1 — divide each state into comparable windows
+#
+# A window is a fixed-length sample of one stable state. Non-overlapping windows
+# let us check whether the result recurs at different times without counting the
+# same frames twice. Both states use the same selected neuron rows, window
+# length, density values, resolution, and number of Louvain runs.
+#
+# For each window, the script repeats the entire pipeline from script 03. Each
+# row appended to ``records`` is one combination of state, window, and density;
+# keeping this tidy table makes the later plotting and practice analysis easier.
 
 # %%
 rec = dataio.load_recording(RECORDING)
@@ -104,7 +113,7 @@ with csv_path.open("w", newline="", encoding="utf-8") as stream:
 print("saved ->", csv_path)
 
 # %% [markdown]
-# ## Figure — window estimates and density robustness
+# ## Step 2 — visualize recurrence across windows and densities
 #
 # The left panel shows all selected windows at K=5%. The right panel shows the
 # same comparison across densities. Look first for the direction of the state
@@ -187,11 +196,11 @@ print("saved ->", figure_path)
 # ## Takeaway
 #
 # NREM modularity is higher in this full example recording across windows and
-# several density choices. Because all points come from one mouse, use script 08
+# several density choices. Because all points come from one mouse, use script 07
 # before making a population-level claim.
 
 # %% [markdown]
-# ## Exercise 4 — calculate the state contrast (intermediate)
+# ## Exercise 4 — calculate the state contrast
 #
 # Using the completed ``records`` list, calculate mean Q separately for Awake and
 # NREM at each density. Then calculate ``NREM − Awake`` and plot that contrast
@@ -202,6 +211,6 @@ print("saved ->", figure_path)
 # 1. Does the contrast keep the same sign across the tested densities?
 # 2. Why can these window-level values not be treated as independent mice?
 #
-# **Where to look for help:** the figure above already demonstrates how to filter
+# **Where to start:** the figure above already demonstrates how to filter
 # ``records`` by state and density. Extend that pattern to calculate the
 # difference requested here.

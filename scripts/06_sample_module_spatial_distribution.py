@@ -51,7 +51,18 @@ DISTANCE_EDGES_UM = (500.0, 1000.0, 1500.0, 2000.0, 2500.0)
 DISTANCE_LABELS = ("0–500", "500–1k", "1k–1.5k", "1.5k–2k", "2k–2.5k", "2.5k+")
 
 # %% [markdown]
-# ## Estimate single-cell and mesoscale partitions
+# ## Step 1 — estimate single-cell and parcel-level partitions
+#
+# The same neurons and the same first stable window from each state are used at
+# both scales. At the parcel scale, 40 nearby neurons contribute to one averaged
+# signal. The network and its Louvain partition are then rebuilt independently
+# at each scale, exactly as in script 05.
+#
+# ``same_module_by_distance`` considers every node pair. It groups pairs by
+# physical distance and reports the fraction assigned to the same module. A
+# nearly flat curve suggests that module membership changes little with
+# distance; a decreasing curve suggests that nearby nodes share modules more
+# often than distant nodes.
 
 # %%
 rec = dataio.load_recording(RECORDING)
@@ -181,10 +192,10 @@ print("saved ->", figure_path)
 #
 # Functional segregation at single-cell resolution does not mean local spatial
 # segregation. Spatially localized modules emerge after averaging nearby cells.
-# Script 10 checks the same result across all recordings.
+# Script 09 checks the same result across all recordings.
 
 # %% [markdown]
-# ## Exercise 6 — create a module-localization contrast (intermediate–advanced)
+# ## Exercise 6 — create a module-localization contrast
 #
 # Define a simple localization contrast as:
 #
@@ -195,8 +206,8 @@ print("saved ->", figure_path)
 # Present the four results in a table and explain which scale appears more
 # localized.
 #
-# **Where to look for help:** the required arrays are already stored in
+# **Where to start:** the required arrays are already stored in
 # ``profiles[state]["single"]`` and ``profiles[state]["meso"]``. Check for
-# non-finite values before choosing the farthest bin. If handling missing bins is
-# unfamiliar, this is a reasonable point to ask AI for guidance—but verify that
-# the selected bin and subtraction direction match the definition above.
+# non-finite values before choosing the farthest bin. Whatever approach you use,
+# verify that the selected bin and subtraction direction match the definition
+# above.

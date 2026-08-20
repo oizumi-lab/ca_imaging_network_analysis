@@ -1,5 +1,5 @@
 # %% [markdown]
-# # 07 · Multi-scale network analysis: module-distribution movie
+# # Supplemental · Multi-scale network analysis: module-distribution movie
 #
 # ## Where this script fits
 # Scripts 05 and 06 compared selected spatial scales. A movie lets you follow the
@@ -43,8 +43,8 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
-# Add the repo root (parent of scripts/) so ``src.funcnet`` is importable.
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# This file is one level below scripts/, so move up twice to reach the repo root.
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -696,18 +696,18 @@ for ax, scale in zip(axes.ravel(), scale_maps):
 for ax in axes.ravel()[len(scale_maps):]:
     ax.set_axis_off()
 fig.suptitle(
-    f"07 · Module geography across scales — {recording_name}, {STATE_TITLES.get(state, state)}",
+    f"Module geography across scales — {recording_name}, {STATE_TITLES.get(state, state)}",
     fontsize=14,
 )
 fig.tight_layout()
 FIG_DIR.mkdir(parents=True, exist_ok=True)
-overview_path = FIG_DIR / f"07_multiscale_overview_{recording_name}_{state}.png"
+overview_path = FIG_DIR / f"multiscale_overview_{recording_name}_{state}.png"
 fig.savefig(overview_path, dpi=160, bbox_inches="tight")
 plt.show()
 print(f"Saved: {overview_path}", flush=True)
 
 # %% [markdown]
-# ## Exercise 7 — compare the scale transition between states (advanced; AI-assisted)
+# ## Supplemental exercise — compare the scale transition between states
 #
 # Extend the analysis so that the static overview compares Awake and NREM using
 # the same neuron rows, window length, density, gamma, and spatial scales. Create
@@ -716,9 +716,8 @@ print(f"Saved: {overview_path}", flush=True)
 # - two aligned contact sheets, one per state; or
 # - curves of Q and module count versus spatial scale for both states.
 #
-# This extension requires organizing results from two state windows and is an
-# appropriate exercise for AI-assisted coding. Ask AI to help plan small steps,
-# but verify these scientific requirements yourself:
+# Organize the comparison in small steps and verify these scientific
+# requirements before interpreting the output:
 #
 # 1. both states use the same selected neurons and number of frames;
 # 2. the graph density remains fixed at every scale; and
@@ -742,7 +741,7 @@ output = (
     Path(OUTPUT)
     if OUTPUT is not None
     else MOVIE_DIR
-    / f"07_multiscale_modules_{recording_name}_{state}_{clustering_method}.mp4"
+    / f"multiscale_modules_{recording_name}_{state}_{clustering_method}.mp4"
 )
 movie_path = render_movie(
     scale_maps,

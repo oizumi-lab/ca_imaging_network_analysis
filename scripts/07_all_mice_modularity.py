@@ -1,20 +1,31 @@
 # %% [markdown]
-# # 08 · State-dependent modularity across all mice
+# # 07 · State-dependent modularity across all mice
 #
-# Everything so far feeds into one question: **does the single-cell functional
-# network become more modular when the brain loses consciousness?**
+# ## Where this script fits
+# Scripts 01--06 followed one recording in detail. That worked example shows how
+# the measurements become a modularity result, but one mouse cannot establish a
+# result that is reproducible across animals. This script repeats the same
+# single-cell analysis for every version-3 sleep and anesthesia recording.
+#
+# The biological question is: **does the single-cell functional network become
+# more modular when the brain loses consciousness?**
 #
 # Kiyooka & Oomoto et al. (2026) report that at single-cell resolution,
 # **modularity Q is higher during NREM sleep and anesthesia than during
 # wakefulness**, robustly across connection densities. Here we reproduce that
 # comparison from the version-3 data.
 #
+# The analysis unit changes as we move through the data hierarchy:
+#
+# ```text
+# frames → windows → recording days → biological mice → cohort summary
+# ```
+#
 # Method (matching the paper): for each state, estimate the functional network
-# from **1500-frame sleep windows** or **2900-frame anesthesia windows** of
-# activity-filtered neurons, threshold at a
-# **fixed density** (ranking pairs by ``|r|``, ``negative=True``, as in script
-# 03), take the **max-Q** Louvain partition, and compare states across a range of
-# densities.
+# from **1,500-frame sleep windows** or **2,900-frame anesthesia windows** of
+# activity-filtered neurons, threshold at a **fixed density** (ranking pairs by
+# ``|r|``, as in script 03), take the **max-Q** Louvain partition, and compare
+# states across a range of densities.
 #
 # **This script produces the talk-style comparison figure**: one modularity-Q
 # dot per complete time window for each recording, separately for Wakefulness vs
@@ -43,7 +54,9 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
 # ## Settings
-# Defaults are kept light so the whole script runs in a few minutes. Louvain cost
+# The default settings limit neuron count and Louvain repetitions so attendees
+# can inspect the workflow without launching the full paper-scale computation.
+# Louvain cost
 # grows with the number of neurons, so we randomly subsample to ``MAX_NEURONS``
 # active neurons per recording. **To reproduce the paper more fully:** set
 # ``MAX_NEURONS = None`` (use all neurons), widen ``DENSITIES`` (the paper spans
@@ -168,9 +181,11 @@ def dataset_measures(recs, width):
 
 
 # %% [markdown]
-# ## Compute measures for both datasets
-# This is the heavy cell (a few minutes). Each line below prints as it runs.
-# Results are kept **per recording** so we can draw the per-mouse scatter.
+# ## Step 1 — compute measures for both datasets
+# This cell may take several minutes. Progress messages identify the recording,
+# state, and number of complete windows. Results remain nested by recording and
+# state; aggregation is deliberately postponed so the data hierarchy stays
+# visible.
 
 # %%
 print("SLEEP dataset (awake vs NREM):")
@@ -180,7 +195,7 @@ ane_data = dataset_measures(ANE_RECS, ANE_WINDOW)
 
 
 # %% [markdown]
-# ## Figure 1 — one modularity value per time window
+# ## Step 2 — inspect window estimates before averaging
 # Each recording has one vertical column. Every small point is max-Q from one
 # complete state-specific window at the same fixed density, ``REF_DENSITY``.
 # The **Average** column contains one point per recording and state (the mean of
@@ -301,7 +316,7 @@ fig_sleep = window_comparison_figure(
     "nrem",
     "Wakefulness vs NREM",
 )
-fig_sleep.savefig(FIG_DIR / "08_modularity_per_mouse_sleep.png", dpi=140, bbox_inches="tight")
+fig_sleep.savefig(FIG_DIR / "07_modularity_per_mouse_sleep.png", dpi=140, bbox_inches="tight")
 
 fig_ane = window_comparison_figure(
     ane_data,
@@ -309,16 +324,18 @@ fig_ane = window_comparison_figure(
     "anesthesia",
     "Wakefulness vs Anesthesia",
 )
-fig_ane.savefig(FIG_DIR / "08_modularity_per_mouse_ane.png", dpi=140, bbox_inches="tight")
+fig_ane.savefig(FIG_DIR / "07_modularity_per_mouse_ane.png", dpi=140, bbox_inches="tight")
 plt.show()
-print("saved ->", FIG_DIR / "08_modularity_per_mouse_sleep.png")
-print("saved ->", FIG_DIR / "08_modularity_per_mouse_ane.png")
+print("saved ->", FIG_DIR / "07_modularity_per_mouse_sleep.png")
+print("saved ->", FIG_DIR / "07_modularity_per_mouse_ane.png")
 
 
 # %% [markdown]
-# ## Figure 2 — modularity vs density (robustness view)
-# The same data, aggregated to one value per biological mouse, as mean±SE curves.
-# The unconscious state should sit above the awake curve **at every density**.
+# ## Step 3 — compare modularity across densities
+# The same data are now aggregated to one value per biological mouse and shown
+# as mean ± standard error curves. The scientific question is whether the
+# direction of the state difference is consistent across densities, rather than
+# appearing only at one threshold choice.
 
 # %%
 def aggregate_curve(data, mouse_groups, state):
@@ -361,12 +378,12 @@ curve_panel(axes[1], ane_data, ANE_MOUSE_GROUPS, "anesthesia", "Wakefulness vs a
 fig.suptitle("Single-cell functional-network modularity is higher during unconsciousness",
              y=1.02, fontsize=13)
 fig.tight_layout()
-fig.savefig(FIG_DIR / "08_all_mice_state_comparison.png", dpi=140, bbox_inches="tight")
+fig.savefig(FIG_DIR / "07_all_mice_state_comparison.png", dpi=140, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## Quantify the difference at the reference density
-# A paired summary at ``REF_DENSITY``. Windows are averaged within recording,
+# ## Step 4 — quantify the paired difference at the reference density
+# This is a paired summary at ``REF_DENSITY``. Windows are averaged within recording,
 # repeated days within mouse, and inference is based on mouse-level state changes.
 
 # %%
@@ -408,3 +425,17 @@ for name, data, groups, other in [
 # Set ``PAPER_MODE = True`` to use all selected neurons, 200 Louvain runs, the
 # wider density range, and every available density-curve window. This is a long
 # research run rather than an in-class exercise.
+
+# %% [markdown]
+# ## Practice — inspect the effect of biological averaging
+#
+# At ``REF_DENSITY``, make a table with one row per biological mouse and columns
+# for Awake Q, NREM or Anesthesia Q, and the paired difference. For sleep Mouse 4,
+# first average its two recording days so it contributes only one row.
+#
+# Compare this table with the window-level points in Figure 1. Explain why the
+# number of plotted windows is not the sample size for a cohort-level statement.
+#
+# **Where to start:** ``paired_mouse_effects`` already returns the three values
+# needed for each dataset. The mouse-group definitions near the settings show
+# which recordings belong to the same biological mouse.

@@ -150,6 +150,11 @@ print("saved ->", correlation_path)
 # Why use absolute correlation? The paper's pipeline treats both strong positive
 # and strong negative relationships as functional edges. In
 # ``density_threshold``, this choice is requested with ``negative=True``.
+#
+# Thresholding creates a binary adjacency matrix: ``1`` means that the pair was
+# retained as an edge and ``0`` means that it was not. The matrix is symmetric
+# because this tutorial treats the relationship as undirected, and its diagonal
+# is zero because a neuron is not connected to itself.
 
 # %%
 n_neurons = rows.size
@@ -266,7 +271,7 @@ print("saved ->", graph_path)
 # count difference deciding the result in advance.
 
 # %% [markdown]
-# ## Exercise 2 — change the graph density (easy)
+# ## Exercise 2 — change the graph density
 #
 # Choose ``K=2%`` or ``K=10%`` and construct a new graph for both states. Report
 # the correlation threshold and retained edge count for each state.
@@ -275,7 +280,8 @@ print("saved ->", graph_path)
 # than at 5%. Then verify that Awake and NREM retain the same number of edges even
 # when their thresholds differ.
 #
-# **Where to look for help:** Step 3 already loops over densities and calls
+# **Where to start:** Step 3 already calls
 # ``net.density_threshold``. Reuse that pattern for one density, and use the
-# upper triangle of the adjacency matrix when counting undirected edges. This
-# exercise should require only a few hand-written lines.
+# upper triangle of the adjacency matrix when counting undirected edges. Put the
+# result in a new cell and leave ``REFERENCE_DENSITY`` unchanged so that you can
+# compare your result with the supplied 5% analysis.

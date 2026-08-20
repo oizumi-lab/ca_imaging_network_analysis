@@ -6,7 +6,7 @@ synchronized EEG/EMG, state labels, and every network-analysis transformation.
 
 ## Learning goals
 
-By the end of scripts 00--07, students should be able to:
+By the end of scripts 00--06, students should be able to:
 
 1. distinguish neural activity, functional connectivity, and a thresholded graph;
 2. explain why graph density must be matched across brain states;
@@ -14,7 +14,7 @@ By the end of scripts 00--07, students should be able to:
 4. handle stochastic community detection with repeated optimization;
 5. compare Awake and NREM networks without treating time windows as mice;
 6. explain how spatial coarse-graining changes module geography; and
-7. modify one setting and interpret a short practice analysis in every script.
+7. modify one setting and interpret a short practice analysis in every analysis script.
 
 ## Track A: one complete recording
 
@@ -94,25 +94,29 @@ correlation graph and modularity are recomputed from scratch at every scale.
 parcel maps. It also plots the probability that two nodes share a module versus
 their cortical distance.
 
-### 07 — animate the multiscale transition
+### Supplemental — animate the multiscale transition
 
-`07_multiscale_module_movie.py` computes partitions at seven scales, aligns the
-otherwise arbitrary module colors across neighboring scales, saves a static
-overview, and renders an MP4 movie.
+`scripts/supplemental/multiscale_module_movie.py` computes partitions at seven
+scales, aligns the otherwise arbitrary module colors across neighboring scales,
+saves a static overview, and renders an MP4 movie. It is optional and does not
+occupy a number in the main workflow.
 
 ### Practice analyses
 
-Each core script ends with an unsolved exercise prompt. Solution code is
-deliberately omitted: early exercises can be written by adapting nearby cells,
-while later extensions are suitable for carefully checked AI assistance.
+Each core analysis script ends with an unsolved practice prompt. Solution code
+is deliberately omitted so attendees can adapt nearby cells, decide what output
+best answers the question, and check their own interpretation.
 
-1. **Easy:** compare average activity between Awake and NREM;
-2. **Easy:** change graph density and inspect edge counts and thresholds;
-3. **Easy–intermediate:** change resolution and inspect the module count;
-4. **Intermediate:** calculate state contrast across densities;
-5. **Intermediate:** find where the spatial-scale contrast is smallest;
-6. **Intermediate–advanced:** construct a module-localization contrast; and
-7. **Advanced, AI-assisted:** extend the multiscale comparison to both states.
+1. compare average activity between Awake and NREM;
+2. change graph density and inspect edge counts and thresholds;
+3. change resolution and inspect the module count;
+4. calculate the state contrast across densities;
+5. find where the spatial-scale contrast is smallest; and
+6. construct a module-localization contrast.
+
+The supplemental movie script contains an additional prompt that extends the
+multiscale comparison to both states. Scripts 07--09 also end with project-style
+practice prompts for working with the full cohort.
 
 ## Track B: reproduce population-level paper results
 
@@ -124,9 +128,9 @@ poetry run python scripts/00_download_data.py --all
 
 Then run:
 
-1. `08_all_mice_modularity.py` — all sleep and anesthesia recordings;
-2. `09_all_mice_coarse_grain_modularity.py` — modularity across spatial scales;
-3. `10_all_mice_module_spatial_distribution.py` — module geography and distance profiles.
+1. `07_all_mice_modularity.py` — all sleep and anesthesia recordings;
+2. `08_all_mice_coarse_grain_modularity.py` — modularity across spatial scales;
+3. `09_all_mice_module_spatial_distribution.py` — module geography and distance profiles.
 
 Mouse 4 has two sleep recording days. The scripts average those days within the
 same biological mouse before cohort summaries, preventing that mouse from

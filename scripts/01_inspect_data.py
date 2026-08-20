@@ -19,8 +19,9 @@
 # 3. Which cortical areas were sampled?
 # 4. Do the EEG and EMG patterns make the deposited sleep-state labels plausible?
 #
-# Scripts 01--07 use this same recording so you can trace every later network
-# quantity back to the data inspected here.
+# Scripts 01--06 use this same recording. The optional supplemental movie also
+# uses it. This lets you trace every later network quantity back to the data
+# inspected here before moving to the all-mice analyses in scripts 07--09.
 
 # %%
 import os
@@ -59,6 +60,13 @@ EEG_WINDOW_SECONDS = 4.0
 # ``state`` contains the deposited behavioral labels. ``used_frame`` supplies
 # stable state epochs used in the network analysis, while ``nonzero_ROI`` marks
 # neurons that passed the publication's activity criterion.
+#
+# The recording contains several representations of neural activity. Raw
+# ``dFF`` is useful for inspecting fluorescence traces. ``spike_deconv`` marks
+# inferred activity events for the raster display, and ``spike_smoothed`` is the
+# continuous activity estimate used later to calculate correlations. Keeping
+# these roles separate prevents a display choice from being mistaken for an
+# analysis choice.
 
 # %%
 rec = dataio.load_recording(RECORDING)
@@ -182,7 +190,8 @@ print("saved ->", trace_path)
 # The terminal layer ``2/3`` suffix is collapsed for display. Motor areas use
 # greens, somatosensory areas warm colors, retrosplenial areas blues, and visual
 # areas purples. The map includes all neurons, not only the network-analysis
-# subset.
+# subset. This check matters because a network observed in only one small patch
+# of cortex should not be interpreted as a whole-cortex network.
 
 # %%
 if rec.atlas is None:
@@ -396,11 +405,11 @@ print("saved ->", physiology_path)
 # ## Takeaway
 #
 # We have one complete, spatially resolved neural population plus independently
-# recorded physiology and state labels. Scripts 02--07 use the same recording so
+# recorded physiology and state labels. Scripts 02--06 use the same recording so
 # every analysis step can be traced back to this concrete dataset.
 
 # %% [markdown]
-# ## Exercise 1 — compare basic activity between states (easy)
+# ## Exercise 1 — compare basic activity between states
 #
 # Before constructing a network, ask a simpler question: is the *average amount*
 # of deconvolved activity different between Awake and NREM?
@@ -414,6 +423,7 @@ print("saved ->", physiology_path)
 # Display the two states in a small table or bar plot. This is a descriptive
 # activity comparison, not a network result.
 #
-# **Where to look for help:** the state-summary loop near the beginning shows how
-# to obtain frames with ``dataio.state_frames``. The plotting sections show the
-# basic Matplotlib pattern. Try writing this exercise without AI.
+# **Where to start:** the state-summary loop near the beginning shows how to
+# obtain frames with ``dataio.state_frames``. The plotting sections show the
+# Matplotlib pattern needed to make a small comparison plot. Add your work in a
+# new cell so that the supplied analysis remains unchanged.

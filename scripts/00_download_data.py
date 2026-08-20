@@ -6,9 +6,9 @@ synchronized EEG/EMG file:
     poetry run python scripts/00_download_data.py
 
 This downloads ``mouse02_sleep`` (about 1.09 GB) plus its physiology file (about
-0.36 GB). It is the recording used by scripts 01--07.
+0.36 GB). It is the recording used by scripts 01--06 and the supplemental movie.
 
-For the full-cohort paper analyses in scripts 08--10, download every calcium and
+For the full-cohort paper analyses in scripts 07--09, download every calcium and
 physiology recording:
 
     poetry run python scripts/00_download_data.py --all
@@ -18,6 +18,10 @@ Dataset version 3: RIKEN neurodata 20260708-001 (CC-BY 4.0)
 
 Files are streamed from the public RIKEN API. Already-complete files are
 skipped after checking their expected byte size, so the script is safe to rerun.
+
+This script only downloads files; it does not alter the recordings. After it
+finishes, continue with ``01_inspect_data.py`` and inspect the signals before
+starting the network analysis.
 """
 
 from __future__ import annotations
@@ -118,7 +122,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument(
     "--all",
     action="store_true",
-    help="download all calcium and EEG/EMG recordings for scripts 08--10",
+    help="download all calcium and EEG/EMG recordings for scripts 07--09",
 )
 args = parser.parse_args()
 

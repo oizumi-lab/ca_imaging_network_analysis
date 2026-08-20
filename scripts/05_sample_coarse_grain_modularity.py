@@ -50,7 +50,17 @@ GAMMA = 1.0
 N_RUNS = 10
 
 # %% [markdown]
-# ## Build parcels and recompute modularity
+# ## Step 1 — build parcels and recompute modularity
+#
+# ``scale=1`` keeps neurons as individual nodes. At larger scales,
+# ``close_clustering`` assigns nearby neurons to one parcel and ``coarse_grain``
+# averages their activity. The parcel definition depends only on coordinates,
+# so Awake and NREM are compared using the same spatial grouping at a given
+# scale.
+#
+# Notice that the correlation matrix is calculated *after* averaging. This is
+# essential: averaging can strengthen or weaken relationships, so thresholding
+# or merging the single-cell graph would answer a different question.
 
 # %%
 rec = dataio.load_recording(RECORDING)
@@ -114,7 +124,11 @@ with csv_path.open("w", newline="", encoding="utf-8") as stream:
 print("saved ->", csv_path)
 
 # %% [markdown]
-# ## Figure — modularity and state contrast versus scale
+# ## Step 2 — plot modularity and the state contrast versus scale
+#
+# The left panel retains the state-specific Q values. The right panel subtracts
+# NREM from Awake, so zero means no difference at that scale, negative values
+# mean NREM is higher, and positive values mean Awake is higher.
 
 # %%
 state_colors = {"awake": "royalblue", "nrem": "crimson"}
@@ -184,11 +198,11 @@ print("saved ->", figure_path)
 # ``nnei=10``, and the state contrast approaches zero as neurons are grouped.
 # The contrast then reverses at the coarsest settings, where only tens of network
 # nodes remain. That instability is a useful warning against treating one mouse
-# or a very small parcel graph as the population result. Script 09 repeats the
+# or a very small parcel graph as the population result. Script 08 repeats the
 # analysis across all mice with mouse-level uncertainty.
 
 # %% [markdown]
-# ## Exercise 5 — find where the state contrast becomes smallest (intermediate)
+# ## Exercise 5 — find where the state contrast becomes smallest
 #
 # Calculate the mean ``Awake − NREM`` modularity contrast at every value in
 # ``SCALES``. Identify the scale with the smallest *absolute* contrast and report
@@ -197,6 +211,6 @@ print("saved ->", figure_path)
 # Make a two-column result table containing parcel size and state contrast. Then
 # explain why a very small graph at a coarse scale may give a less stable result.
 #
-# **Where to look for help:** ``means_by_state`` and ``contrast`` were constructed
+# **Where to start:** ``means_by_state`` and ``contrast`` were constructed
 # for the figure above. Node counts are stored in each row of ``records``. You
 # will need to combine those two pieces of information.

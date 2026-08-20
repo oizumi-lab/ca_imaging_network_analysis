@@ -8,19 +8,20 @@ calcium imaging, based on Kiyooka & Oomoto et al. (Cell Reports, 2026).
 
 ## Teaching workflow
 
-- Scripts 00--07 use the complete `mouse02_sleep` calcium recording and its
+- Scripts 00--06 use the complete `mouse02_sleep` calcium recording and its
   synchronized EEG/EMG recording.
-- Scripts 08--10 require all calcium recordings and reproduce all-mice
+- Scripts 07--09 require all calcium recordings and reproduce all-mice
   modularity and spatial-scale comparisons.
 
-Run the scripts in numeric order. Scripts 01--10 are interactive `# %%` files
+Run the scripts in numeric order. Scripts 01--09 are interactive `# %%` files
 for VS Code or Spyder. Reusable logic belongs under `src/funcnet/`; settings,
 narrative cells, and figure composition remain in `scripts/`.
 
 ## Repository layout
 
 ```text
-scripts/          00--10 course and research-extension workflow
+scripts/          00--09 course and research-extension workflow
+  supplemental/   optional unnumbered analysis scripts
 src/funcnet/      data I/O, physiology, time windows, networks, coarse-graining,
                   statistics, plotting, and project paths
 tests/            data-free regression tests
@@ -41,7 +42,7 @@ Default course download:
 poetry run python scripts/00_download_data.py
 ```
 
-All data for scripts 08--10:
+All data for scripts 07--09:
 
 ```bash
 poetry run python scripts/00_download_data.py --all

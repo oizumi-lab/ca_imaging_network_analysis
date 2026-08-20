@@ -30,8 +30,13 @@
 # - $\gamma$ = **resolution**: $\gamma>1$ → smaller modules, $\gamma<1$ → larger.
 # - $c_i$ = the module neuron $i$ is assigned to; $\delta=1$ if same module.
 #
+# You do not need to derive this equation during the hands-on session. Read it
+# as a comparison between the observed within-module edges and the number
+# expected from a degree-matched reference model. A larger Q means that the
+# proposed partition separates the graph more strongly under those settings.
+#
 # The **Louvain algorithm** searches assignments $c$ to maximise $Q$. This script
-# covers the three things you must get right in practice: (1) thresholding at a
+# introduces three practical choices: (1) thresholding at a
 # **fixed density**, (2) the **stochasticity** of Louvain and how to tame it, and
 # (3) the **resolution** parameter.
 
@@ -173,10 +178,11 @@ def outline_modules(ax, boundaries, colors, linewidth=1.6):
 
 # %% [markdown]
 # ## Why a *fixed density*?
-# A denser graph trivially has more within-module edges, which inflates Q. To
-# compare networks fairly we fix the **connection density** K — the fraction of
-# possible edges we keep — so any Q difference reflects *organisation*, not edge
-# count. Following the paper, we rank pairs by **absolute** correlation
+# A denser graph changes the number of possible within-module edges and can
+# change Q even if the underlying organization is otherwise similar. To compare
+# networks fairly we fix the **connection density** K — the fraction of possible
+# edges we keep — so an edge-count difference does not decide the comparison.
+# Following the paper, we rank pairs by **absolute** correlation
 # (``negative=True``): a neuron pair is connected if its ``|r|`` is in the top K.
 # Below: each state's correlation matrix thresholded at three densities.
 
@@ -224,7 +230,9 @@ plt.show()
 
 # %% [markdown]
 # ## Louvain is stochastic — run it many times
-# Each Louvain run starts from a random order, so Q and the partition wobble.
+# Each Louvain run explores the graph in a different random order, so it can
+# return a slightly different Q and partition. This is a property of the search,
+# not evidence that the recording itself changed.
 # The published pipeline runs Louvain **200×** and keeps the **max-Q** partition
 # (`repeat_louvain`), optionally fusing runs into a **consensus** partition.
 #
@@ -419,9 +427,11 @@ plt.show()
 
 # %% [markdown]
 # ## The resolution parameter γ
-# Sweeping γ traces a resolution profile: larger γ → more, smaller modules.
-# Reporting Q across γ (and across density) shows a result is not an artefact of
-# one parameter choice.
+# The resolution parameter changes the size of groups favored by the objective:
+# larger γ usually produces more, smaller modules. Sweeping γ shows whether the
+# qualitative partition depends on a single module-size setting. Compare module
+# counts across γ; Q values computed with different γ values do not use the same
+# penalty and should not be ranked as interchangeable scores.
 
 # %%
 gammas = [0.5, 1.0, 1.5, 2.0]
@@ -495,10 +505,10 @@ plt.show()
 # procedure is displayed independently for one Awake window and one
 # NREM/Anesthesia window. Script ``04_sample_state_comparison.py`` repeats this
 # across all complete windows of the example recording. Script
-# ``08_all_mice_modularity.py`` then tests robustness across animals.
+# ``07_all_mice_modularity.py`` then tests robustness across animals.
 
 # %% [markdown]
-# ## Exercise 3 — change the module-size resolution (easy–intermediate)
+# ## Exercise 3 — change the module-size resolution
 #
 # ``gamma`` controls the scale at which Louvain searches for modules. Compare
 # ``gamma=0.8``, ``1.0``, and ``1.2`` for one state. Use at least five Louvain
@@ -509,6 +519,6 @@ plt.show()
 # gamma values use different null-model penalties and are not directly
 # interchangeable scores.
 #
-# **Where to look for help:** adapt the existing “resolution parameter γ” loop.
+# **Where to start:** adapt the existing “resolution parameter γ” loop.
 # You only need to store its outputs and make a small gamma-versus-module-count
 # plot.
