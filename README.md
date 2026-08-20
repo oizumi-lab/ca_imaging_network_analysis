@@ -79,14 +79,6 @@ Each analysis script ends with a practice prompt. The repository does not
 include solution cells. Add your work in a new cell and use the neighboring code
 as a pattern without replacing the supplied workflow.
 
-## Optional supplemental analysis
-
-[scripts/supplemental/multiscale_module_movie.py](scripts/supplemental/multiscale_module_movie.py)
-extends scripts `05`–`06` by rebuilding the network at seven spatial scales and
-rendering the resulting module maps as a movie. Supplemental scripts use
-descriptive filenames without numeric prefixes because they are not required
-steps in the main sequence.
-
 ## Research extension: all mice
 
 Attendees who want to reproduce the cohort-level paper results or begin a
@@ -114,79 +106,13 @@ Mouse 4 has two sleep recording days. The all-mice scripts combine those days
 within the same biological mouse before cohort summaries so that one mouse does
 not receive twice the weight.
 
-## Core network workflow
-
-```text
-smoothed deconvolved activity
-        ↓  Pearson correlation
-one value for every neuron pair
-        ↓  retain the strongest |r| values at density K
-binary graph with a matched edge count in every state
-        ↓  repeat Louvain community detection
-max-Q module partition and modularity Q
-```
-
-Here, a functional edge represents statistical co-activity; it does not imply a
-direct synapse or causal influence. Matching density controls the number of
-edges, but it does not remove every possible difference in activity statistics.
-Louvain is stochastic, so the scripts repeat the optimization and retain the
-highest-Q partition, following the published workflow.
-
 ## Repository layout
 
 ```text
 scripts/                 numbered course and all-mice workflows
 scripts/supplemental/    optional, unnumbered extensions
-src/funcnet/             reusable loading, network, spatial, and plotting code
 tests/                   synthetic regression tests that need no downloaded data
 documents/               tutorial guide and reproducible slide-deck builder
 data/                    downloaded recordings; ignored by Git
 results/                 generated figures, tables, and movies; ignored by Git
 ```
-
-The reusable package is organized as follows:
-
-| Module | Responsibility |
-|---|---|
-| `dataio.py` | Load version-3 MATLAB/HDF5 recordings, states, and active-neuron rows |
-| `physiology.py` | Load and frame-trigger-align EEG/EMG and prepare display features |
-| `timeseries.py` | Construct stable-state windows and acquisition segments |
-| `network.py` | Calculate correlation, fixed-density graphs, and Louvain modularity |
-| `coarsegrain.py` | Build spatial parcels and summarize module distance dependence |
-| `visualization.py` | Plot states, activity, cortical regions, and module maps |
-| `statistics.py` | Calculate mouse-level confidence summaries |
-| `paths.py` | Define portable input and output locations |
-
-## Tutorial slides
-
-After the analysis figures have been generated, rebuild the hands-on deck with:
-
-```bash
-poetry run python documents/build_handson_slides.py
-```
-
-This creates `documents/CSHA_handson_tutorial.pptx`, which summarizes the
-script-by-script flow and the transition from the one-recording tutorial to the
-all-mice extension. The generated deck and the large source talk
-`documents/CSHA_082426.pptx` are intentionally ignored by Git; the small builder
-script is the reproducible source kept in the repository.
-
-## Tests
-
-The tests use synthetic, data-free fixtures:
-
-```bash
-poetry run python -m unittest discover -s tests -v
-poetry run ruff check src/funcnet scripts tests documents/build_handson_slides.py
-```
-
-## Archive and attribution
-
-The broader pre-course code—including DMD, graphical lasso, Rastermap,
-small-world, and verification studies—is preserved in branch
-`archive/full-analysis-2026` and tag `full-analysis-2026-08-18`. The course-facing
-main branch remains focused on the modularity tutorial while Git retains the
-full development history.
-
-The datasets are released under CC BY 4.0. Cite the version-3 dataset release
-and the Cell Reports paper when reusing the data, scripts, or derived results.
