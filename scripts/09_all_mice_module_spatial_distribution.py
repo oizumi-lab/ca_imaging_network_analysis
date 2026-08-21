@@ -36,6 +36,23 @@
 # **K = 0.05** → **max-Q** Louvain (γ = 1) over ``N_RUNS`` iterations. Distances
 # are binned in **500-µm** steps and each pair scored 1/0 for same-module
 # (``coarsegrain.same_module_by_distance``, a port of ``dist_and_mod.m``).
+#
+# ## Beginner's code map
+#
+# This script keeps two spatial scales in parallel. In nested dictionaries,
+# ``"single"`` selects individual neurons and ``"meso"`` selects parcels of
+# nearby neurons. Important names are:
+#
+# - ``coords`` / ``pcoords``: neuron / parcel x-y coordinates in µm;
+# - ``X`` / ``res``: neuron / parcel activity with time in columns;
+# - ``ci_s`` / ``ci_m``: one single-cell / mesoscale module label per node;
+# - ``out``: window profiles for one recording; and
+# - ``prof``: those profiles for every recording in a cohort.
+#
+# The script first makes example maps, then calculates distance profiles for all
+# mice. Each locally defined function handles one stage and documents the shape
+# of what it returns. If you want a new spatial statistic, keep the network-
+# building functions unchanged and add it after the module labels are returned.
 
 # %%
 import os
@@ -63,23 +80,41 @@ warnings.filterwarnings("ignore", message="Mean of empty slice")   # empty dista
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
-# ## Settings
-# The defaults limit neuron count, windows, and Louvain repetitions so the
-# workflow can be inspected before a full run. **To reproduce the
-# paper more fully:** set ``MAX_NEURONS = None`` (all active neurons), raise
-# ``N_RUNS`` toward 200, and ``N_WINDOWS`` for smoother per-mouse curves.
+# ## Settings and ``PAPER_MODE``
+#
+# ``PAPER_MODE`` is one Boolean switch for the expensive cohort calculations.
+# ``False`` is the recommended teaching/debugging mode; ``True`` is the
+# paper-scale research mode. Changing it automatically makes these choices:
+#
+# | setting | teaching mode (False) | paper mode (True) |
+# | --- | --- | --- |
+# | ``N_RUNS`` | 20 Louvain searches | 200 searches |
+# | ``N_WINDOWS`` | first window/state | every complete window (``None``) |
+# | ``MAX_NEURONS`` | at most 2,500 | every active neuron (``None``) |
+# | ``N_RUNS_MAP`` | 30 searches | 200 searches |
+#
+# This switch does not change the scientific method, ``K``, ``GAMMA``, distance
+# bins, or parcel size. It greatly increases runtime because single-cell
+# networks contain thousands of nodes; a complete paper-mode run may require
+# many hours or days. Develop extensions with ``False`` and use ``True`` only for
+# a final unattended run. Numerical results can differ because teaching mode
+# samples fewer neurons, windows, and stochastic searches.
+#
+# Two details are intentionally independent of the switch. Example maps always
+# load all active neurons so their node counts match the paper, and mesoscale
+# maps always use ``N_RUNS_MESO=200`` because their parcel graphs are small.
 
 # %%
-PAPER_MODE = False
-K = 0.05
-GAMMA = 1.0
-N_RUNS = 200 if PAPER_MODE else 20
-N_WINDOWS = None if PAPER_MODE else 1
-MAX_NEURONS = None if PAPER_MODE else 2500
-MESO_NNEI = 40         # parcel size for the mesoscale networks (Fig. 7 uses nnei = 40)
+PAPER_MODE = False  # False = teaching run; True = long full-data calculation
+K = 0.05            # connection density: retain the strongest 5% of pairs
+GAMMA = 1.0         # Louvain module-size resolution
+N_RUNS = 200 if PAPER_MODE else 20  # repeats per cohort graph
+N_WINDOWS = None if PAPER_MODE else 1  # windows/state; None means every window
+MAX_NEURONS = None if PAPER_MODE else 2500  # cohort cap; None means all neurons
+MESO_NNEI = 40      # target neurons per mesoscale parcel (paper Fig. 7)
 # The example MAPS always use ALL active neurons (no subsample) to match the paper's counts.
-N_RUNS_MAP = 200 if PAPER_MODE else 30
-N_RUNS_MESO = 200      # Louvain runs for the mesoscale example maps (few parcels; cheap, paper: 200)
+N_RUNS_MAP = 200 if PAPER_MODE else 30  # single-cell example-map repeats
+N_RUNS_MESO = 200  # mesoscale example-map repeats in both modes (small graphs)
 
 # 500-µm distance-bin upper edges → bins [0-500, 500-1000, ..., 2000-2500, 2500+].
 DIST_EDGES = (500.0, 1000.0, 1500.0, 2000.0, 2500.0)
@@ -103,7 +138,28 @@ EX_ANE_REC = "mouse05_ane"       # 3210 active neurons -> Anesthesia example
 
 # %%
 def prepare(name, subsample=True):
-    """Load a recording; return per-neuron and per-parcel (nnei=40) signals+coords (µm)."""
+    """Load one recording and prepare both spatial resolutions.
+
+    Parameters
+    ----------
+    name : str
+        Recording name understood by ``dataio.load_recording``.
+    subsample : bool
+        If True, apply ``MAX_NEURONS``; if False, keep every active neuron.
+
+    Returns
+    -------
+    rec : Recording
+        Loaded recording and metadata.
+    coords : NumPy array, shape (neurons, 2)
+        Selected neuron coordinates in micrometres.
+    X : NumPy array, shape (neurons, frames)
+        Selected smoothed activity.
+    res : NumPy array, shape (parcels, frames)
+        Activity averaged within ``MESO_NNEI``-neuron parcels.
+    parcel_coords : NumPy array, shape (parcels, 2)
+        Corresponding parcel centroids in micrometres.
+    """
     rec = dataio.load_recording(name)
     max_neurons = MAX_NEURONS if subsample else None
     rows = dataio.select_neuron_rows(rec, max_neurons=max_neurons, seed=0)
@@ -127,9 +183,14 @@ def prepare(name, subsample=True):
 
 # %%
 def maps_for(name, labels):
-    """Single-cell and mesoscale (coords_µm, module_labels) for each state of one
-    recording, using ALL active neurons (so node counts match the paper's Fig. 5/7F).
-    Loads the recording once."""
+    """Calculate example-map partitions for selected states of one recording.
+
+    ``labels`` is a sequence such as ``["awake", "nrem"]``. The recording is
+    loaded once with every active neuron. The returned dictionary supports
+    ``result[state]["single"]`` and ``result[state]["meso"]``; each value is a
+    ``(coordinates, module_labels)`` tuple ready for plotting. Only the first
+    complete state window is used for these example maps.
+    """
     rec, coords, X, res, pcoords = prepare(name, subsample=False)
     result = {}
     for label in labels:
@@ -196,7 +257,12 @@ plt.show()
 
 # %%
 def recording_profiles(name, width):
-    """Per-window same-module-vs-distance profiles at both scales, for each state."""
+    """Calculate distance profiles for every selected window of one recording.
+
+    ``name`` selects the recording and ``width`` gives frames per window. The
+    return value is ``out[state][scale]``, a list of arrays. Each array contains
+    same-module probability for the bins defined by ``DIST_EDGES``.
+    """
     rec, coords, X, res, pcoords = prepare(name)
     out = {label: {"single": [], "meso": []} for label in rec.state_labels}
     for label in rec.state_labels:
@@ -227,6 +293,11 @@ def recording_profiles(name, width):
 
 
 def run_dataset(recs, kind):
+    """Run :func:`recording_profiles` for every recording in one cohort.
+
+    ``kind`` is ``"sleep"`` or ``"ane"`` and selects the matching window length
+    from ``WIN``. The return dictionary is indexed by recording name.
+    """
     print(f"{kind.upper()} dataset ({len(recs)} recordings):", flush=True)
     return {name: recording_profiles(name, WIN[kind]) for name in recs}
 
@@ -238,7 +309,12 @@ ane_prof = run_dataset(ANE_RECS, "ane")
 
 # %%
 def per_mouse_profiles(prof, mouse_map, state, scale):
-    """List (one per mouse) of mean same-module-vs-distance curves for a state/scale."""
+    """Average recording windows into one distance curve per biological mouse.
+
+    ``prof`` contains recording-level profiles and ``mouse_map`` assigns those
+    recordings to mouse IDs. ``state`` and ``scale`` select one condition. The
+    returned list contains one one-dimensional NumPy array per mouse.
+    """
     curves = []
     for mouse in sorted(set(mouse_map.values())):
         recs = [n for n, m in mouse_map.items() if m == mouse and n in prof]
@@ -249,6 +325,13 @@ def per_mouse_profiles(prof, mouse_map, state, scale):
 
 
 def plot_profile(ax, prof, mouse_map, unconscious, scale, unc_color, unc_name):
+    """Draw mouse-level Awake and unconscious-state distance profiles.
+
+    The function selects one scale, obtains per-mouse curves with
+    :func:`per_mouse_profiles`, and modifies the supplied Matplotlib ``ax``.
+    ``unc_color`` and ``unc_name`` control only the second state's appearance.
+    Nothing is returned.
+    """
     xs = np.arange(len(DIST_LABELS))
     plotted = []
     for curves, color in [(per_mouse_profiles(prof, mouse_map, "awake", scale), "royalblue"),

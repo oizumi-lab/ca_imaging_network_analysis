@@ -33,6 +33,26 @@
 # window-averaged values per recording, joined across states. A second figure
 # shows the same result as mean±SE curves **vs connection density**, to make the
 # "robust across densities" point explicit.
+#
+# ## Beginner's code map
+#
+# This is the first cohort script, so it adds two levels to the earlier loops:
+# recording and biological mouse. The calculation flows as follows:
+#
+# ```text
+# one state window → one result at each density
+# many windows      → one recording summary
+# recording day(s)  → one biological-mouse summary
+# mice              → cohort mean and standard error
+# ```
+#
+# Important short names follow the earlier tutorials: ``rows`` are neuron
+# indices, ``win`` is a frame-index array, ``C`` is correlation, ``adj`` is a
+# binary adjacency matrix, ``Q`` is modularity, and ``nmod`` is module count.
+# ``sleep_data`` and ``ane_data`` are nested dictionaries rather than flat
+# tables because later functions need to select recording → state → density →
+# measure. Read a lookup from left to right, for example
+# ``sleep_data[name]["awake"][0.05]["Q"]``.
 
 # %%
 import os
@@ -53,16 +73,35 @@ warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
-# ## Settings
-# The default settings limit neuron count and Louvain repetitions so attendees
-# can inspect the workflow without launching the full paper-scale computation.
-# Louvain cost
-# grows with the number of neurons, so we randomly subsample to ``MAX_NEURONS``
-# active neurons per recording. **To reproduce the paper more fully:** set
-# ``MAX_NEURONS = None`` (use all neurons), widen ``DENSITIES`` (the paper spans
-# 0.008–0.3), and raise ``N_RUNS`` toward 200. Subsampling can change both the
-# absolute Q values and the estimated state contrast, so treat the defaults as a
-# teaching-sized descriptive run.
+# ## Settings and ``PAPER_MODE``
+#
+# ``PAPER_MODE`` is a Boolean switch: a Boolean is either ``False`` or ``True``.
+# Keep it ``False`` while learning, editing, or debugging. Set it to ``True``
+# only when you intend to start the full research-scale calculation.
+#
+# With ``PAPER_MODE = False`` (teaching mode), this script uses:
+#
+# - at most 3,000 active neurons per recording;
+# - 5 Louvain repeats per graph;
+# - five graph densities; and
+# - at most two windows per state for the density curves.
+#
+# With ``PAPER_MODE = True`` (paper mode), the conditional expressions below
+# automatically change all four choices:
+#
+# - ``MAX_NEURONS = None`` uses every activity-filtered neuron;
+# - ``N_RUNS = 200`` repeats Louvain 200 times per graph;
+# - ``DENSITIES`` expands to nine values from 0.008 to 0.30; and
+# - ``DENSITY_CURVE_WINDOWS = None`` analyzes every complete window at every
+#   density.
+#
+# The method is identical in both modes; only the amount of data and repeated
+# optimization changes. On the complete downloaded dataset there are 72 state
+# windows, so paper mode requests 72 × 9 × 200 = 129,600 Louvain searches. It can
+# take multiple days on a laptop. Use teaching mode to develop an exercise, then
+# launch paper mode only for a final unattended run. The two modes can give
+# different numerical estimates because neuron/window subsampling changes the
+# estimated networks.
 #
 # Each small **dot** in the first comparison figures is one complete time-window
 # estimate at ``REF_DENSITY``. All available complete windows are shown; they
@@ -76,19 +115,19 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # nulls when extending the workflow to new biological claims.
 
 # %%
-PAPER_MODE = False
-SLEEP_WINDOW = 1500
-ANE_WINDOW = 2900
+PAPER_MODE = False  # False = responsive teaching run; True = multi-day full run
+SLEEP_WINDOW = 1500  # frames per stable-state window in sleep recordings
+ANE_WINDOW = 2900    # frames per stable-state window in anesthesia recordings
 DENSITIES = (
     [0.008, 0.01, 0.02, 0.03, 0.05, 0.08, 0.10, 0.20, 0.30]
     if PAPER_MODE
     else [0.02, 0.03, 0.05, 0.08, 0.10]
 )
-REF_DENSITY = 0.05  # reference density for the numeric summary at the end
-N_RUNS = 200 if PAPER_MODE else 5
-DENSITY_CURVE_WINDOWS = None if PAPER_MODE else 2
-GAMMA = 1.0
-MAX_NEURONS = None if PAPER_MODE else 3000
+REF_DENSITY = 0.05  # density used for window plots and the numeric summary
+N_RUNS = 200 if PAPER_MODE else 5  # Louvain repeats for every graph
+DENSITY_CURVE_WINDOWS = None if PAPER_MODE else 2  # None means every window
+GAMMA = 1.0  # Louvain module-size resolution
+MAX_NEURONS = None if PAPER_MODE else 3000  # None means all active neurons
 
 # All recordings: 5 sleep mice (mouse 4 recorded on two days) and 4 anesthesia mice.
 SLEEP_RECS = ["mouse01_sleep", "mouse02_sleep", "mouse03_sleep",
@@ -134,7 +173,24 @@ UNCONSCIOUS_COLOR = {"nrem": "crimson", "anesthesia": "goldenrod"}
 
 # %%
 def state_measures(rec, label, rows, width):
-    """max-Q and module count per (window, density) for one state.
+    """Calculate modularity for every selected window of one brain state.
+
+    Parameters
+    ----------
+    rec : Recording
+        Loaded recording returned by ``dataio.load_recording``.
+    label : str
+        State name such as ``"awake"``, ``"nrem"``, or ``"anesthesia"``.
+    rows : one-dimensional NumPy array
+        Neuron indices used for both states of this recording.
+    width : int
+        Number of frames in each complete, non-overlapping window.
+
+    Returns
+    -------
+    out : dict
+        ``out[density]["Q"]`` is a list of maximum-Q values, and
+        ``out[density]["nmod"]`` is the matching list of module counts.
 
     Every complete window is evaluated at ``REF_DENSITY`` for the per-window
     scatter. To keep the density sweep tractable, only the first
@@ -166,7 +222,13 @@ def state_measures(rec, label, rows, width):
 
 
 def dataset_measures(recs, width):
-    """Per-recording measures → {recording: {state_label: {K: {"Q":[], "nmod":[]}}}}."""
+    """Run :func:`state_measures` for every recording and state.
+
+    ``recs`` is a list of recording names and ``width`` is the window length.
+    The return value has the nested form
+    ``data[recording][state][density][measure]``. Keeping recordings separate
+    here prevents windows from different mice being pooled accidentally.
+    """
     data = {}
     for name in recs:
         rec = dataio.load_recording(name)
@@ -205,7 +267,13 @@ ane_data = dataset_measures(ANE_RECS, ANE_WINDOW)
 
 # %%
 def recording_summary(rec_states, state, measure, density=None, max_windows=None):
-    """Mean over windows, optionally after also averaging across densities."""
+    """Reduce one recording's window values to a single number.
+
+    ``rec_states`` is one recording entry from ``sleep_data`` or ``ane_data``.
+    ``measure`` is ``"Q"`` or ``"nmod"``. Pass one ``density`` to summarize
+    that graph density, or leave it ``None`` to average all densities. An
+    optional ``max_windows`` cap keeps comparisons matched to teaching mode.
+    """
     densities = DENSITIES if density is None else [density]
     vals = []
     for K in densities:
@@ -217,7 +285,12 @@ def recording_summary(rec_states, state, measure, density=None, max_windows=None
 
 
 def mouse_summary(data, rec_names, state, measure, density=None, max_windows=None):
-    """Equal-weight mean of recording/day summaries for one biological mouse."""
+    """Return one equal-weight value for a biological mouse.
+
+    ``rec_names`` may contain one recording or repeated recording days. Each day
+    is summarized first by :func:`recording_summary`, then the day summaries are
+    averaged. This prevents a day with more windows from receiving more weight.
+    """
     vals = [
         recording_summary(
             data[name],
@@ -232,7 +305,13 @@ def mouse_summary(data, rec_names, state, measure, density=None, max_windows=Non
 
 
 def window_comparison_figure(data, recording_columns, unconscious_state, title):
-    """Plot one Q point per window and one paired mean per recording."""
+    """Create the fixed-density window comparison figure.
+
+    Parameters are the nested dataset, display-column definitions, the second
+    state name, and a title. Small dots represent windows. The final ``Average``
+    column contains one mean per recording with state pairs joined by lines.
+    The returned Matplotlib ``Figure`` is saved by the calling code.
+    """
     fig, ax = plt.subplots(figsize=(8.2, 4.8))
     color_un = UNCONSCIOUS_COLOR[unconscious_state]
     state_offset = 0.08
@@ -339,7 +418,12 @@ print("saved ->", FIG_DIR / "07_modularity_per_mouse_ane.png")
 
 # %%
 def aggregate_curve(data, mouse_groups, state):
-    """Mean±SE of biological-mouse Q values using a matched window cap."""
+    """Return cohort mean and standard error at every graph density.
+
+    ``mouse_groups`` maps display mouse names to their recording day(s). For each
+    density, windows and days are averaged within mouse before the cohort mean
+    and SE are calculated. Both returned arrays have ``len(DENSITIES)`` values.
+    """
     m = np.empty(len(DENSITIES))
     se = np.empty(len(DENSITIES))
     for j, K in enumerate(DENSITIES):
@@ -360,6 +444,11 @@ def aggregate_curve(data, mouse_groups, state):
 
 
 def curve_panel(ax, data, mouse_groups, unconscious_state, title):
+    """Draw Awake and unconscious-state density curves on one plotting panel.
+
+    This function modifies the supplied Matplotlib ``ax`` in place and returns
+    nothing. It calls :func:`aggregate_curve` once for each state.
+    """
     x = [K * 100 for K in DENSITIES]
     for state, color in [("awake", "royalblue"),
                          (unconscious_state, UNCONSCIOUS_COLOR[unconscious_state])]:
@@ -388,7 +477,12 @@ plt.show()
 
 # %%
 def paired_mouse_effects(data, mouse_groups, other):
-    """One awake/unconscious pair per biological mouse at REF_DENSITY."""
+    """Return paired mouse-level values at ``REF_DENSITY``.
+
+    Returns three equally sized arrays: Awake Q, unconscious-state Q, and
+    ``unconscious - awake``. One array position corresponds to one biological
+    mouse, including one already-pooled value for sleep Mouse 4's two days.
+    """
     awake = np.asarray([
         mouse_summary(data, rec_names, "awake", "Q", density=REF_DENSITY)
         for _, rec_names in mouse_groups

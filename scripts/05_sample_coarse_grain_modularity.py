@@ -18,6 +18,21 @@
 # signals changes their correlations. This step tells us whether the state
 # difference is a single-cell phenomenon or remains visible after local signals
 # are combined.
+#
+# ## Beginner's code map
+#
+# The outer loop changes spatial scale. Inside it, the code rebuilds parcel
+# signals once, then analyzes every state and time window at that same scale.
+# Important array shapes are:
+#
+# - ``coords``: ``(neurons, 2)`` x/y cortical positions;
+# - ``activity``: ``(neurons, frames)`` smoothed activity;
+# - ``parcel_index``: one parcel label per neuron;
+# - ``parcel_activity``: ``(parcels, frames)`` averaged activity; and
+# - ``parcel_coords``: ``(parcels, 2)`` mean x/y positions.
+#
+# The ``records`` list again acts as a table. Each dictionary in it stores one
+# state × window × scale result and is later written to CSV.
 
 # %%
 import csv
@@ -37,17 +52,24 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
-# ## Settings
+# ## Settings you may modify
+#
+# - ``SCALES`` gives neurons per spatial parcel. ``1`` is the ungrouped network.
+# - ``MAX_WINDOWS`` and ``MAX_NEURONS`` are teaching-size runtime limits.
+# - ``K``, ``GAMMA``, and ``N_RUNS`` control graph thresholding and Louvain in
+#   exactly the same way as scripts 03--04.
+# - Keep ``WINDOW_FRAMES`` matched to the dataset unless your project explicitly
+#   studies a different temporal scale.
 
 # %%
-RECORDING = "mouse02_sleep"
-SCALES = (1, 2, 5, 10, 20, 40)
-WINDOW_FRAMES = 1500
-MAX_WINDOWS = 2
-MAX_NEURONS = 2500
-K = 0.05
-GAMMA = 1.0
-N_RUNS = 10
+RECORDING = "mouse02_sleep"      # dataset used for this worked example
+SCALES = (1, 2, 5, 10, 20, 40)  # target neurons per parcel; 1 = single cell
+WINDOW_FRAMES = 1500             # frames in one stable-state window
+MAX_WINDOWS = 2                  # maximum windows per state; None means all
+MAX_NEURONS = 2500               # maximum active neurons; None means all
+K = 0.05                         # keep the strongest 5% of parcel pairs
+GAMMA = 1.0                      # Louvain module-size resolution
+N_RUNS = 10                      # Louvain repeats per scale/state/window graph
 
 # %% [markdown]
 # ## Step 1 — build parcels and recompute modularity
@@ -61,17 +83,27 @@ N_RUNS = 10
 # Notice that the correlation matrix is calculated *after* averaging. This is
 # essential: averaging can strengthen or weaken relationships, so thresholding
 # or merging the single-cell graph would answer a different question.
+#
+# Function guide:
+#
+# - ``pdist`` measures every pairwise cortical distance and ``squareform`` turns
+#   those distances into a reusable neuron-by-neuron matrix.
+# - ``cg.close_clustering`` returns one spatial-parcel label per neuron.
+# - ``cg.coarse_grain`` averages signals and coordinates within each parcel.
+# - ``net.modularity_from_activity`` performs correlation, density thresholding,
+#   repeated Louvain, and returns all results in one dictionary.
 
 # %%
 rec = dataio.load_recording(RECORDING)
 rows = dataio.select_neuron_rows(rec, max_neurons=MAX_NEURONS, seed=0)
 coords = rec.centroid_um[rows]
 activity = rec.spike_smoothed[rows]
-distances = squareform(pdist(coords))
+distances = squareform(pdist(coords))  # computed once and reused at every scale
 records = []
 
 for scale in SCALES:
     if scale == 1:
+        # At scale 1, each neuron is already one parcel; no averaging is needed.
         parcel_activity = activity
         parcel_coords = coords
     else:
@@ -129,6 +161,10 @@ print("saved ->", csv_path)
 # The left panel retains the state-specific Q values. The right panel subtracts
 # NREM from Awake, so zero means no difference at that scale, negative values
 # mean NREM is higher, and positive values mean Awake is higher.
+#
+# ``window_curves`` becomes a list of one-dimensional arrays. ``np.vstack``
+# stacks them into a ``(windows, scales)`` matrix, allowing ``mean(axis=0)`` to
+# average windows separately at every scale.
 
 # %%
 state_colors = {"awake": "royalblue", "nrem": "crimson"}

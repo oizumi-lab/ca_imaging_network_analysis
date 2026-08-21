@@ -22,6 +22,29 @@
 # Scripts 01--06 use this same recording. The optional supplemental movie also
 # uses it. This lets you trace every later network quantity back to the data
 # inspected here before moving to the all-mice analyses in scripts 07--09.
+#
+# ## How to read and modify this file
+#
+# Lines beginning with ``# %%`` divide this Python file into notebook-like
+# cells. Editors such as VS Code and Spyder can run one cell at a time. A
+# ``# %% [markdown]`` cell is explanatory text; a plain ``# %%`` cell is code.
+# Running from top to bottom is important because later cells reuse variables
+# created earlier.
+#
+# A few Python conventions used throughout the tutorial:
+#
+# - ``UPPER_CASE`` names are settings intended to be easy to find and edit.
+# - ``rec`` is the loaded recording object; attributes such as ``rec.dFF`` hold
+#   NumPy arrays.
+# - Neural arrays have shape ``(neurons, frames)``. Row 10 is one neuron and
+#   column 100 is one time point.
+# - ``rows`` contains selected neuron indices and ``frames`` contains selected
+#   time indices. They are indices, not measured values.
+# - ``fig`` is a complete Matplotlib figure and ``ax`` is one plotting panel.
+# - A function call such as ``dataio.load_recording(RECORDING)`` sends the value
+#   in parentheses to a reusable function and receives its returned result.
+#
+# For a first pass, change only the settings below, then rerun the whole file.
 
 # %%
 import os
@@ -44,15 +67,25 @@ from src.funcnet.paths import FIG_DIR
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
-# ## Settings
+# ## Settings you may safely edit
+#
+# - ``RECORDING`` selects the dataset. Use a name printed by
+#   ``dataio.list_recordings()``.
+# - ``TRACE_NEURONS`` controls how many raw traces are drawn, not how many
+#   neurons are retained in later network analyses.
+# - ``TRACE_SEED`` makes the random trace selection repeatable. A different
+#   integer displays a different reproducible sample.
+# - ``DISPLAY_BIN_SECONDS`` changes only the raster display resolution.
+# - ``EEG_MAX_FREQUENCY_HZ`` and ``EEG_WINDOW_SECONDS`` control the EEG figure.
+#   They do not modify the calcium-network calculations in later scripts.
 
 # %%
-RECORDING = "mouse02_sleep"
-TRACE_NEURONS = 100
-TRACE_SEED = 7
-DISPLAY_BIN_SECONDS = 1.0
-EEG_MAX_FREQUENCY_HZ = 25.0
-EEG_WINDOW_SECONDS = 4.0
+RECORDING = "mouse02_sleep"  # dataset name, without a file extension
+TRACE_NEURONS = 100          # number of randomly selected raw traces to plot
+TRACE_SEED = 7               # integer seed for a reproducible random selection
+DISPLAY_BIN_SECONDS = 1.0    # temporal width of one raster-display column
+EEG_MAX_FREQUENCY_HZ = 25.0  # highest EEG frequency shown
+EEG_WINDOW_SECONDS = 4.0     # time span used for each spectrogram estimate
 
 # %% [markdown]
 # ## Load and summarize the complete recording
@@ -69,6 +102,9 @@ EEG_WINDOW_SECONDS = 4.0
 # analysis choice.
 
 # %%
+# ``load_recording`` reads the files and packages related arrays and metadata in
+# one object. ``select_neuron_rows`` returns the indices that passed the
+# publication's activity criterion.
 rec = dataio.load_recording(RECORDING)
 active_rows = dataio.select_neuron_rows(rec)
 print(rec)
@@ -88,6 +124,10 @@ for label in rec.state_labels:
 # neurons are median-centered and vertically offset only for display: there is
 # no smoothing, temporal binning, clipping, or per-neuron amplitude scaling.
 # The random seed makes the selected rows exactly reproducible.
+#
+# Programming note: square brackets select array entries. For example,
+# ``rec.dFF[trace_rows]`` keeps the requested neuron rows and every frame.
+# NumPy operations with ``axis=1`` work separately across time for each neuron.
 
 # %%
 duration_min = rec.n_frames / rec.fs / 60
@@ -106,14 +146,19 @@ timeline_view = {
     "boundary_minutes": boundary_minutes,
 }
 
+# Create a local random-number generator rather than changing global randomness.
 rng = np.random.default_rng(TRACE_SEED)
 trace_rows = np.sort(rng.choice(rec.n_neurons, size=TRACE_NEURONS, replace=False))
 traces = rec.dFF[trace_rows]
+# ``keepdims=True`` keeps a (neurons, 1) result so NumPy can subtract one median
+# from every time point in the corresponding neuron row (broadcasting).
 centered = traces - np.nanmedian(traces, axis=1, keepdims=True)
 q01, q99 = np.nanpercentile(centered, (1, 99))
 spacing = 1.15 * max(float(q99 - q01), 1e-6)
 offsets = -np.arange(TRACE_NEURONS) * spacing
 time_min = np.arange(rec.n_frames) / rec.fs / 60
+# Each pair is ``(start, stop)`` for one continuous acquisition segment. Plotting
+# segments separately avoids drawing a false line across an acquisition gap.
 acquisition_segments = ts.acquisition_segments(rec.n_frames, rec.boundary_ind)
 
 fig = plt.figure(figsize=(15, 10), constrained_layout=True)
@@ -121,6 +166,7 @@ grid = fig.add_gridspec(2, 1, height_ratios=(9, 0.48))
 trace_ax = fig.add_subplot(grid[0])
 state_ax = fig.add_subplot(grid[1], sharex=trace_ax)
 viz.shade_states(trace_ax, timeline_view)
+# ``zip`` walks through one trace and its matching vertical offset together.
 for trace, offset in zip(centered, offsets):
     for start, stop in acquisition_segments:
         trace_ax.plot(
@@ -192,6 +238,10 @@ print("saved ->", trace_path)
 # areas purples. The map includes all neurons, not only the network-analysis
 # subset. This check matters because a network observed in only one small patch
 # of cortex should not be interpreted as a whole-cortex network.
+#
+# Programming note: expressions such as ``display_regions == region`` produce a
+# Boolean mask (one True/False value per neuron). Using that mask inside square
+# brackets selects only neurons belonging to the requested cortical region.
 
 # %%
 if rec.atlas is None:
@@ -221,6 +271,7 @@ named_regions = tuple(
     for region in region_order
     if region not in {"Unassigned", "Other", "Unknown"}
 )
+# The leading ``*`` unpacks both tuples into one iteration sequence.
 for region in (*background_regions, *named_regions):
     selected = display_regions == region
     ax.scatter(
@@ -272,8 +323,15 @@ print("saved ->", spatial_path)
 # NREM labels, whereas awake periods typically have lower relative delta and
 # stronger muscle activity. The labels are supplied by the dataset; this script
 # visualizes their physiological basis rather than training a new classifier.
+#
+# The helper functions below return processed values for plotting. Their inputs
+# state the important choices explicitly: signal arrays, sampling rates, time
+# bins, and alignment information. If you change a display setting, trace that
+# setting into the matching function call before interpreting the output.
 
 # %%
+# A function may return several values. ``_`` is the conventional name for a
+# returned value that this script intentionally does not use.
 raster, _, bin_frames, _, bin_centers = viz.binned_spike_raster(
     rec.spike_deconv,
     rec.fs,

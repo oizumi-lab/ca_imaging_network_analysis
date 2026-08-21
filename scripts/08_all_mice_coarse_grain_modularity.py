@@ -31,6 +31,23 @@
 # The paper's finding: the awake-vs-unconscious modularity gap present at the
 # single-cell scale **shrinks toward zero** as coarse-graining increases (the CI
 # includes 0 for `nnei ≥ 10` sleep, `≥ 5` anesthesia).
+#
+# ## Beginner's code map
+#
+# The main calculation nests recording → spatial scale → state → time window.
+# At each spatial scale it creates a new parcel activity matrix and rebuilds the
+# network from that matrix. Recurring names are:
+#
+# - ``X``: neuron-by-frame activity;
+# - ``x, y``: one cortical coordinate pair per neuron;
+# - ``idx``: one parcel assignment per neuron;
+# - ``res``: parcel-by-frame averaged activity (not a statistical result here);
+# - ``out``: nested modularity values indexed by state and scale; and
+# - ``awake_mat`` / ``unc_mat``: mouse-by-scale result matrices.
+#
+# Functions divide the work into stages: analyze one recording, analyze a whole
+# dataset, aggregate recordings into mice, and plot. Read their docstrings first,
+# then inspect their bodies only when you need to change that stage.
 
 # %%
 import os
@@ -59,24 +76,42 @@ warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
-# ## Settings
-# The default settings use a limited neuron count, window count, and number of
-# Louvain repetitions. The most time-consuming scale is
-# `nnei = 1` (thousands of nodes); coarser scales shrink the graph and run fast.
-# **To reproduce the paper more fully:** set `MAX_NEURONS = None`, raise `N_RUNS`
-# toward 200, and raise `N_WINDOWS`. Subsampling can change both absolute Q and
-# the state contrast, especially when only a few parcels remain.
+# ## Settings and ``PAPER_MODE``
+#
+# ``PAPER_MODE`` is a Boolean switch. Keep it ``False`` for an interactive
+# teaching run. Set it to ``True`` only for a final, unattended paper-scale run.
+# The expression ``200 if PAPER_MODE else 20`` means “choose 200 when the switch
+# is True; otherwise choose 20.”
+#
+# The switch changes three settings together:
+#
+# | setting | teaching mode (False) | paper mode (True) |
+# | --- | --- | --- |
+# | ``N_RUNS`` | 20 Louvain searches | 200 searches |
+# | ``N_WINDOWS`` | first 2 windows/state | every complete window (``None``) |
+# | ``MAX_NEURONS`` | at most 2,000 | every active neuron (``None``) |
+#
+# Paper mode does not change ``SCALES``, ``K``, ``GAMMA``, or the biological
+# averaging. The ``nnei=1`` graph is the main bottleneck because it can contain
+# thousands of nodes; a complete full-mode run can require many hours or days.
+# Teaching and paper modes follow the same method but can give different numbers
+# because teaching mode samples fewer neurons and windows.
+#
+# The panel-F example maps are a deliberate exception: ``module_map`` always
+# uses all active neurons and ``FMAP_N_RUNS=200`` in either mode, because the
+# parcel graph is much smaller. ``USE_CONSENSUS`` changes the chosen partition,
+# not the amount of input data.
 
 # %%
-PAPER_MODE = False
-SCALES = [1, 2, 5, 10, 20, 40, 80, 160]   # nnei: neurons per parcel (1 = single cell)
-K = 0.05          # connection density (Fig. 7 is at K = 0.05)
-GAMMA = 1.0
-N_RUNS = 200 if PAPER_MODE else 20
-N_WINDOWS = None if PAPER_MODE else 2
-MAX_NEURONS = None if PAPER_MODE else 2000
-FMAP_SCALE = 40    # parcel size for the example module map, panel F
-FMAP_N_RUNS = 200  # Louvain iterations for panel F (paper: 200)
+PAPER_MODE = False  # False = teaching run; True = long full-data calculation
+SCALES = [1, 2, 5, 10, 20, 40, 80, 160]  # neurons/parcel; 1 = single cell
+K = 0.05          # connection density: retain the strongest 5% of pairs
+GAMMA = 1.0       # Louvain module-size resolution
+N_RUNS = 200 if PAPER_MODE else 20  # Louvain repeats per graph
+N_WINDOWS = None if PAPER_MODE else 2  # windows/state; None means every window
+MAX_NEURONS = None if PAPER_MODE else 2000  # None means every active neuron
+FMAP_SCALE = 40    # neurons per parcel for the panel-F example map
+FMAP_N_RUNS = 200  # Louvain repetitions for panel F in both modes
 USE_CONSENSUS = False  # Fig. 7 (main) uses the max-Q partition; True -> consensus (suppl. DS1-24)
 
 WIN = {"sleep": 1500, "ane": 2900}   # frames per window (paper's per-dataset windows)
@@ -97,10 +132,22 @@ FMAP_ANE_REC = "mouse05_ane"
 
 # %%
 def recording_measures(name, width):
-    """Max-Q per (state, scale, window) for one recording.
+    """Calculate window-level modularity across all scales for one recording.
 
-    Returns ``out`` where ``out[label][nnei] = [Q per window]``. The panel-F
-    module maps are computed separately by :func:`module_map`, since they use
+    Parameters
+    ----------
+    name : str
+        Recording name understood by ``dataio.load_recording``.
+    width : int
+        Number of frames in each complete state window.
+
+    Returns
+    -------
+    out : dict
+        ``out[state][nnei]`` is a list containing one maximum-Q value per
+        analyzed window.
+
+    The panel-F module maps are computed separately by :func:`module_map`, since they use
     all active neurons and many more Louvain runs. Consensus is an optional
     supplementary-analysis setting rather than the main-figure default.
     """
@@ -135,6 +182,11 @@ def recording_measures(name, width):
 
 
 def run_dataset(recs, kind):
+    """Analyze every recording name in ``recs`` with the matching window size.
+
+    ``kind`` is ``"sleep"`` or ``"ane"`` and selects ``WIN[kind]``. The return
+    dictionary is indexed first by recording name.
+    """
     print(f"{kind.upper()} dataset ({len(recs)} recordings):", flush=True)
     return {name: recording_measures(name, WIN[kind]) for name in recs}
 
@@ -156,7 +208,12 @@ ane_data = run_dataset(ANE_RECS, "ane")
 
 # %%
 def per_mouse_means(data, mouse_map, unconscious_label):
-    """Return (mouse_ids, awake_mat, unc_mat) with shape (n_mice, n_scales)."""
+    """Pool recording windows into one curve per biological mouse.
+
+    ``mouse_map`` assigns each recording name to a mouse ID; two sleep recording
+    days therefore map to the same mouse. Returns the sorted IDs plus Awake and
+    unconscious-state arrays, each shaped ``(n_mice, n_scales)``.
+    """
     mice = sorted(set(mouse_map.values()))
     awake = np.full((len(mice), len(SCALES)), np.nan)
     unc = np.full((len(mice), len(SCALES)), np.nan)
@@ -187,6 +244,11 @@ ane_mice, ane_aw, ane_un = per_mouse_means(ane_data, ANE_MOUSE, "anesthesia")
 
 # %%
 def plot_modularity_scale(ax, awake_mat, unc_mat, unc_label, unc_color):
+    """Plot individual mouse values and cohort means across spatial scales.
+
+    ``awake_mat`` and ``unc_mat`` have mice in rows and scales in columns. The
+    supplied Matplotlib ``ax`` is modified in place; nothing is returned.
+    """
     xs = np.arange(len(SCALES))
     ax.plot(xs, awake_mat.T, "x", color="royalblue", ms=6, ls="none")
     ax.plot(xs, unc_mat.T, "o", color=unc_color, ms=4, mec="k", mew=.3, ls="none")
@@ -200,6 +262,12 @@ def plot_modularity_scale(ax, awake_mat, unc_mat, unc_label, unc_color):
 
 
 def plot_diff_scale(ax, awake_mat, unc_mat, unc_label):
+    """Plot paired Awake-minus-unconscious differences with a 95% CI.
+
+    Subtracting equally shaped matrices preserves mouse pairing. The confidence
+    interval is calculated independently at each scale, ignoring missing values.
+    This function draws on ``ax`` and returns nothing.
+    """
     xs = np.arange(len(SCALES))
     diff = awake_mat - unc_mat
     # Student-t interval with a separate non-NaN mouse count at each scale.
@@ -247,12 +315,17 @@ plt.show()
 
 # %%
 def module_map(name, label, width, nnei=FMAP_SCALE, n_runs=FMAP_N_RUNS):
-    """Module partition of one state's coarse-grained network at ``nnei``.
+    """Build one state's coarse-grained module map.
+
+    Parameters are the recording name, state label, window width, target neurons
+    per parcel, and number of Louvain searches. ``nnei`` and ``n_runs`` have
+    defaults, so ordinary calls need only the first three arguments.
 
     Uses ALL active neurons (no subsample). Returns the **max-Q partition over
     ``n_runs`` Louvain iterations** (the paper's Fig. 7 method), or the consensus
     partition if ``USE_CONSENSUS`` (the supplementary Fig. DS1-24 variant).
-    Returns ``(x_parcel, y_parcel, ci)`` or ``None`` if the state is too short.
+    Returns ``(x_parcel, y_parcel, ci)``—two coordinate arrays plus one module
+    label per parcel—or ``None`` if the state is too short.
     """
     rec = dataio.load_recording(name)
     rows = dataio.select_neuron_rows(rec)  # all active rows; no map subsampling

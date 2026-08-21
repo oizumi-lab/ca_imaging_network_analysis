@@ -34,7 +34,9 @@ Do the graphs separate into functional modules?
         ↓
 Does modularity change between Awake and NREM sleep?
         ↓
-Does the result persist across spatial scales and biological mice?
+Does the result change depending on spatial scales?
+        ↓
+Does the result persist across different mice?
 ```
 
 By the end, you should be able to distinguish neural activity, correlation,

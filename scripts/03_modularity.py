@@ -39,6 +39,24 @@
 # introduces three practical choices: (1) thresholding at a
 # **fixed density**, (2) the **stochasticity** of Louvain and how to tame it, and
 # (3) the **resolution** parameter.
+#
+# ## Beginner's code map
+#
+# This script is longer because it both performs the analysis and explains it
+# with several figures. Run it from top to bottom. Important recurring names:
+#
+# - ``X``: activity with shape ``(neurons, frames)``;
+# - ``C``: correlation matrix;
+# - ``adj``: binary adjacency matrix;
+# - ``ci``: one integer module label per neuron (community index);
+# - ``Q``: the modularity score for that partition;
+# - ``K``: retained graph density; and
+# - ``gamma``: Louvain's module-size resolution parameter.
+#
+# A dictionary such as ``state_results[label]`` groups all arrays and results for
+# one state. Functions introduced below package repeated display operations.
+# Their docstrings describe inputs and returned values; you can call the same
+# functions from a new exercise cell without copying their internal code.
 
 # %%
 import argparse
@@ -74,17 +92,31 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # code. ``MAX_NEURONS`` keeps this explanatory figure responsive; set it to
 # ``None`` to use every activity-filtered neuron, as in the full analysis. The
 # identical neuron rows are used for both states.
+#
+# Runtime settings:
+#
+# - ``MAX_NEURONS`` caps the graph size; ``None`` uses all active neurons.
+# - ``N_RUNS`` controls repeated Louvain searches for the main result. More runs
+#   improve the chance of finding a high-Q solution but increase runtime roughly
+#   in direct proportion.
+# - ``PROFILE_RUNS`` is the smaller repeat count used only for the gamma sweep.
+# - ``DEFAULT_RECORDING`` and ``WINDOW_FRAMES`` are dictionaries keyed by the
+#   selected dataset, so the sleep and anesthesia choices stay matched.
 
 # %%
-DEFAULT_DATASET = "sleep"
+DEFAULT_DATASET = "sleep"  # used when no --dataset command-line option is given
 DEFAULT_RECORDING = {
     "sleep": "mouse02_sleep",
     "anesthesia": "mouse07_ane",
 }
 WINDOW_FRAMES = {"sleep": 1500, "anesthesia": 2900}
-MAX_NEURONS = 3000
-N_RUNS = 30       # course default; use 200 for the paper-scale optimization
-PROFILE_RUNS = 10
+MAX_NEURONS = 3000  # course-size cap; None means all activity-filtered neurons
+N_RUNS = 30         # course default; use 200 for paper-scale optimization
+PROFILE_RUNS = 10   # repetitions for each value in the short gamma sweep
+
+# ``argparse`` lets terminal users override settings without editing this file,
+# for example: ``poetry run python scripts/03_modularity.py --dataset anesthesia``.
+# In a notebook, leave the command-line options alone and edit DEFAULT_DATASET.
 
 parser = argparse.ArgumentParser(
     description="Explain modularity for one brain-state dataset"
@@ -100,6 +132,9 @@ parser.add_argument(
     default=None,
     help="optional recording name; it must belong to the selected dataset",
 )
+# ``parse_known_args`` ignores notebook/editor arguments that are unrelated to
+# this tutorial. The returned ``options`` object exposes ``options.dataset`` and
+# ``options.recording``.
 options, _unknown = parser.parse_known_args()
 
 DATASET = "anesthesia" if options.dataset == "ane" else options.dataset
@@ -140,7 +175,23 @@ output_suffix = DATASET
 
 
 def module_display_layout(ci):
-    """Build a stable, size-ranked layout for displaying one partition.
+    """Build a readable plotting order for one module partition.
+
+    Parameters
+    ----------
+    ci : one-dimensional NumPy array
+        One integer community/module label per neuron.
+
+    Returns
+    -------
+    order : NumPy array
+        Neuron indices sorted so members of a module appear together.
+    display_ci : NumPy array
+        Size-ranked labels starting at zero, used only for colors and display.
+    boundaries : NumPy array
+        Start/stop positions of module blocks in the sorted matrix.
+    colors : NumPy array
+        One RGBA plotting color per displayed module.
 
     Louvain's integer labels are arbitrary.  For a readable adjacency plot we
     relabel modules from largest to smallest *for display only*, then keep each
@@ -163,7 +214,12 @@ def module_display_layout(ci):
 
 
 def outline_modules(ax, boundaries, colors, linewidth=1.6):
-    """Outline the within-module blocks of a module-sorted matrix."""
+    """Draw colored rectangles around a module-sorted adjacency matrix.
+
+    ``ax`` is the Matplotlib panel to modify. ``boundaries`` and ``colors`` are
+    outputs from :func:`module_display_layout`. The function draws on ``ax`` and
+    therefore does not need to return a new object.
+    """
     for start, stop, color in zip(boundaries[:-1], boundaries[1:], colors):
         ax.add_patch(
             Rectangle(
@@ -244,9 +300,13 @@ plt.show()
 # **giant-component partition** (`net.giant_component_init`) that collapses all
 # isolated neurons into one community — so the reported number of modules
 # reflects real structure, not stray singletons.
+#
+# ``net.repeat_louvain`` returns a dictionary. The most-used entries are
+# ``Q_all`` (one score per run), ``Q_max`` (the best score), ``ci_max`` (module
+# labels from that best run), and ``n_modules_max`` (its number of modules).
 
 # %%
-K = 0.05
+K = 0.05  # keep 5% of all possible undirected edges
 for label in rec.state_labels:
     analysis = state_results[label]
     adj, thr = net.density_threshold(analysis["correlation"], K, negative=True)

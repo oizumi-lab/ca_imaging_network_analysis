@@ -15,6 +15,18 @@
 # borders. We should therefore inspect the spatial map rather than assume that a
 # module forms one compact patch. This script compares single-cell modules with
 # modules obtained after averaging 40 neighboring neurons.
+#
+# ## Beginner's code map
+#
+# This script calculates two parallel versions of the same analysis. The keys
+# ``"single"`` and ``"meso"`` select the single-neuron and parcel networks;
+# the state keys ``"awake"`` and ``"nrem"`` select the condition. For example,
+# ``partitions["awake"]["single"]`` retrieves the complete single-cell Louvain
+# result for Awake. Nested dictionaries keep these combinations explicit.
+#
+# Common names: ``coords`` stores x/y positions, ``activity`` stores
+# neuron-by-frame signals, ``ci_max`` stores one module label per node, and a
+# ``profile`` stores same-module probability in successive distance bins.
 
 # %%
 import os
@@ -36,17 +48,25 @@ from src.funcnet.paths import FIG_DIR
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
-# ## Settings
+# ## Settings you may modify
+#
+# - ``MESO_NNEI`` is the target neurons per mesoscale parcel.
+# - ``DISTANCE_EDGES_UM`` contains upper edges of the distance bins in µm;
+#   ``DISTANCE_LABELS`` must have one label per resulting bin, including the
+#   final open-ended bin.
+# - ``N_RUNS_SINGLE`` and ``N_RUNS_MESO`` control repeated Louvain searches.
+#   Parcel graphs are smaller, so the mesoscale repeat count can be larger.
+# - ``MAX_NEURONS`` limits only the example's active-neuron sample.
 
 # %%
-RECORDING = "mouse02_sleep"
-WINDOW_FRAMES = 1500
-MAX_NEURONS = 2500
-MESO_NNEI = 40
-K = 0.05
-GAMMA = 1.0
-N_RUNS_SINGLE = 20
-N_RUNS_MESO = 100
+RECORDING = "mouse02_sleep"  # dataset used for this worked example
+WINDOW_FRAMES = 1500         # frames in the first stable window per state
+MAX_NEURONS = 2500           # maximum active neurons; None means all
+MESO_NNEI = 40               # target neurons per mesoscale parcel
+K = 0.05                     # retain the strongest 5% of node pairs
+GAMMA = 1.0                  # Louvain module-size resolution
+N_RUNS_SINGLE = 20           # Louvain repeats for large single-cell graphs
+N_RUNS_MESO = 100            # repeats for the smaller parcel graphs
 DISTANCE_EDGES_UM = (500.0, 1000.0, 1500.0, 2000.0, 2500.0)
 DISTANCE_LABELS = ("0–500", "500–1k", "1k–1.5k", "1.5k–2k", "2k–2.5k", "2.5k+")
 
@@ -63,6 +83,15 @@ DISTANCE_LABELS = ("0–500", "500–1k", "1k–1.5k", "1.5k–2k", "2k–2.5k",
 # nearly flat curve suggests that module membership changes little with
 # distance; a decreasing curve suggests that nearby nodes share modules more
 # often than distant nodes.
+#
+# Function guide:
+#
+# - ``cg.close_clustering`` assigns each neuron to a nearby spatial parcel.
+# - ``cg.coarse_grain`` returns averaged parcel signals and parcel centroids.
+# - ``net.modularity_from_activity`` builds a fixed-density graph and finds its
+#   best Louvain partition over repeated runs.
+# - ``cg.same_module_by_distance`` bins all node pairs by physical distance and
+#   returns the fraction whose two module labels are equal.
 
 # %%
 rec = dataio.load_recording(RECORDING)
@@ -79,8 +108,8 @@ parcel_activity, parcel_x, parcel_y = cg.coarse_grain(
 )
 parcel_coords = np.column_stack([parcel_x, parcel_y])
 
-partitions = {}
-profiles = {}
+partitions = {}  # full modularity result dictionaries, indexed by state/scale
+profiles = {}    # distance-bin arrays, indexed by state/scale
 for state in rec.state_labels:
     available = dataio.state_frames(rec, state)
     if available.size < WINDOW_FRAMES:

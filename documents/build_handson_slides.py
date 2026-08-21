@@ -163,7 +163,7 @@ def add_header(slide, title, *, eyebrow=None, step=None):
         Inches(0.60),
         Inches(0.60 if eyebrow else 0.38),
         Inches(12.1),
-        Inches(0.65),
+        Inches(0.82),
         size=28,
         color=NAVY,
         bold=True,
@@ -721,7 +721,7 @@ def build_physiology(prs):
 def build_connectivity(prs):
     slide = add_slide(
         prs,
-        "02 · Convert co-activity into matched-density graphs",
+        "02 · Build matched-density functional networks",
         eyebrow="Track A · functional connectivity",
         step="script 02",
     )
@@ -924,7 +924,7 @@ def build_sample_compare(prs):
 def build_sample_scale(prs):
     slide = add_slide(
         prs,
-        "05 · Rebuild the network at coarser spatial scales",
+        "05 · Rebuild networks at coarser spatial scales",
         eyebrow="Track A · scale dependence",
         step="script 05",
     )
@@ -1222,7 +1222,7 @@ def build_all_mice(prs):
 def build_all_scale(prs):
     slide = add_slide(
         prs,
-        "08 · Test state differences across spatial scales",
+        "08 · Compare brain states across spatial scales",
         eyebrow="Track B · population scale analysis",
         step="script 08",
     )
@@ -1246,12 +1246,12 @@ def build_all_scale(prs):
         slide,
         [
             ("Why all mice?", True, GOLD),
-            ("The one-recording pattern need not be the cohort pattern.", False, INK),
+            ("One recording need not match the cohort.", False, INK),
             ("Read the uncertainty", True, NAVY),
-            ("Confidence intervals that cross zero do not establish equivalence.", False, INK),
+            ("A CI crossing zero does not establish equivalence.", False, INK),
         ],
         Inches(8.83),
-        Inches(4.63),
+        Inches(4.50),
         Inches(3.67),
         Inches(1.55),
         size=14,
@@ -1300,7 +1300,7 @@ def build_all_spatial(prs):
         ],
         Inches(8.48),
         Inches(5.67),
-        Inches(2.75),
+        Inches(2.30),
         Inches(0.90),
         size=13,
         gap=5,

@@ -26,6 +26,23 @@
 # 2. why a dense correlation matrix must be reduced to a graph;
 # 3. why Awake and NREM graphs must contain the same number of edges; and
 # 4. why equal graph density can require different correlation thresholds.
+#
+# ## Beginner's code map
+#
+# Run the cells from top to bottom. The main variables deliberately keep the
+# same meaning in scripts 02--09:
+#
+# - ``rec``: one loaded recording.
+# - ``rows``: neuron-row indices shared by both brain states.
+# - ``frames``: time indices belonging to one state.
+# - ``activity`` or ``X``: a ``(neurons, frames)`` activity array.
+# - ``correlation`` or ``C``: a square pairwise-correlation matrix.
+# - ``adjacency`` or ``adj``: a square binary graph matrix (1=edge, 0=no edge).
+# - ``K`` or ``density``: the fraction of possible edges retained.
+#
+# ``state_results`` is a dictionary. Think of it as labeled storage:
+# ``state_results["awake"]["activity"]`` retrieves the Awake activity matrix.
+# Each loop adds another named result so later cells do not need to recompute it.
 
 # %%
 import os
@@ -56,16 +73,25 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 #
 # ``MAX_NEURONS`` keeps the course exercise responsive. The paper-scale scripts
 # can use every activity-filtered neuron.
+#
+# Settings to try:
+#
+# - change ``RECORDING`` to another downloaded recording;
+# - reduce ``MAX_NEURONS`` for a faster exercise, or use ``None`` for all active
+#   neurons (which requires much more memory and time);
+# - change ``REFERENCE_DENSITY`` between 0 and 1. For example, ``0.05`` means
+#   retain 5% of all possible undirected neuron pairs.
 
 # %%
-RECORDING = "mouse02_sleep"
-MAX_NEURONS = 2500
-REFERENCE_DENSITY = 0.05
+RECORDING = "mouse02_sleep"  # downloaded dataset name
+MAX_NEURONS = 2500           # course-size neuron cap; None means no cap
+REFERENCE_DENSITY = 0.05     # 0.05 = retain the strongest 5% of pairs
 
 rec = dataio.load_recording(RECORDING)
 window_frames = {"sleep": 1500, "ane": 2900}[rec.data_info]
 rows = dataio.select_neuron_rows(rec, max_neurons=MAX_NEURONS, seed=0)
 
+# Start with an empty dictionary, then create one nested dictionary per state.
 state_results = {}
 for state in rec.state_labels:
     available_frames = dataio.state_frames(rec, state)
@@ -75,6 +101,8 @@ for state in rec.state_labels:
             f"{window_frames} are required"
         )
     frames = available_frames[:window_frames]
+    # ``np.ix_`` selects every combination of the chosen neuron rows and frames,
+    # giving an array with shape (len(rows), len(frames)).
     activity = rec.spike_smoothed[np.ix_(rows, frames)]
     state_results[state] = {
         "frames": frames,
@@ -99,6 +127,10 @@ for state in rec.state_labels:
 # neurons may be correlated because they receive common input. We therefore call
 # this a *functional-connectivity* matrix: it summarizes relationships in the
 # recorded activity.
+#
+# ``net.correlation_matrix`` is a project helper function. It expects a
+# ``(nodes, time)`` array and returns a square ``(nodes, nodes)`` array. The
+# following loop calculates it once per state and stores it under a new key.
 
 # %%
 for state, result in state_results.items():
@@ -155,9 +187,19 @@ print("saved ->", correlation_path)
 # retained as an edge and ``0`` means that it was not. The matrix is symmetric
 # because this tutorial treats the relationship as undirected, and its diagonal
 # is zero because a neuron is not connected to itself.
+#
+# ``net.density_threshold(C, K, negative=True)`` returns two objects:
+#
+# 1. the binary adjacency matrix; and
+# 2. the absolute-correlation cutoff required to obtain density ``K``.
+#
+# The name ``negative=True`` means rank edges by ``|r|`` so strong negative
+# correlations can also be retained. It does not create negative graph edges.
 
 # %%
 n_neurons = rows.size
+# ``//`` is integer division. An undirected graph has n(n-1)/2 unique pairs
+# because the lower and upper matrix triangles describe the same edges.
 n_possible_edges = n_neurons * (n_neurons - 1) // 2
 print(f"Possible undirected neuron pairs: {n_possible_edges:,}")
 

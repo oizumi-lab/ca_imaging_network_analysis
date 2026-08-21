@@ -18,6 +18,19 @@
 # Each point is a time window from one recording, not an independent mouse. This
 # lets us examine within-recording consistency, but it is not a population test.
 # Script 07 performs the biological-replicate comparison across mice.
+#
+# ## Beginner's code map
+#
+# This script uses three nested loops. Read them from the outside inward:
+# ``state`` → ``window`` → ``density``. One pass through the innermost loop
+# produces one modularity result. That result is stored as a dictionary in the
+# ``records`` list, so ``records`` acts like an in-memory table whose rows have
+# named columns such as ``state``, ``density``, and ``q_max``.
+#
+# Names reused from earlier scripts are ``rows`` (neuron indices), ``frames``
+# (time indices), ``activity`` (neurons × frames), ``correlation`` (nodes ×
+# nodes), and ``adjacency`` (the binary graph). Follow one pass through the loops
+# before trying to understand the plotting code.
 
 # %%
 import csv
@@ -36,17 +49,27 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # %% [markdown]
-# ## Settings
+# ## Settings you may modify
+#
+# - ``WINDOW_FRAMES`` is the number of consecutive stable-state frames per
+#   estimate. Shorter windows run faster but estimate correlations from less data.
+# - ``DENSITIES`` is a tuple of graph densities to test. ``0.05`` means 5%.
+# - ``REFERENCE_DENSITY`` chooses which one appears in the window scatter plot;
+#   it must also occur in ``DENSITIES``.
+# - ``MAX_WINDOWS`` limits windows per state and ``MAX_NEURONS`` limits graph
+#   nodes. Use ``None`` for either limit only when a longer run is acceptable.
+# - ``N_RUNS`` repeats stochastic Louvain optimization for each graph.
+# - ``GAMMA`` controls module-size resolution; script 03 explains this choice.
 
 # %%
-RECORDING = "mouse02_sleep"
-WINDOW_FRAMES = 1500
-DENSITIES = (0.02, 0.05, 0.10)
-REFERENCE_DENSITY = 0.05
-MAX_WINDOWS = 4
-MAX_NEURONS = 2500
-N_RUNS = 10
-GAMMA = 1.0
+RECORDING = "mouse02_sleep"       # dataset used for this worked example
+WINDOW_FRAMES = 1500              # frames in one non-overlapping state window
+DENSITIES = (0.02, 0.05, 0.10)   # graph densities evaluated for every window
+REFERENCE_DENSITY = 0.05          # density shown as individual window points
+MAX_WINDOWS = 4                   # maximum windows per state; None means all
+MAX_NEURONS = 2500                # maximum active neurons; None means all
+N_RUNS = 10                       # Louvain repeats for each graph
+GAMMA = 1.0                       # Louvain module-size resolution
 
 # %% [markdown]
 # ## Step 1 — divide each state into comparable windows
@@ -59,11 +82,20 @@ GAMMA = 1.0
 # For each window, the script repeats the entire pipeline from script 03. Each
 # row appended to ``records`` is one combination of state, window, and density;
 # keeping this tidy table makes the later plotting and practice analysis easier.
+#
+# Functions used in this step:
+#
+# - ``ts.frame_windows(indices, width, max_windows=...)`` returns a list of
+#   non-overlapping, fixed-length frame-index arrays.
+# - ``net.correlation_matrix(activity)`` returns the node-by-node correlations.
+# - ``net.density_threshold(C, density)`` returns ``(adjacency, cutoff)``.
+# - ``net.repeat_louvain(adj, ...)`` returns a dictionary containing ``Q_max``,
+#   ``ci_max``, and other repeated-search results.
 
 # %%
 rec = dataio.load_recording(RECORDING)
 rows = dataio.select_neuron_rows(rec, max_neurons=MAX_NEURONS, seed=0)
-records = []
+records = []  # one dictionary per state × window × density result
 
 for state in rec.state_labels:
     windows = ts.frame_windows(
@@ -72,6 +104,8 @@ for state in rec.state_labels:
         max_windows=MAX_WINDOWS,
     )
     print(f"{state}: {len(windows)} complete windows", flush=True)
+    # ``enumerate(..., start=1)`` supplies a human-readable window number while
+    # also giving us the actual array of frame indices.
     for window_index, frames in enumerate(windows, start=1):
         activity = rec.spike_smoothed[np.ix_(rows, frames)]
         correlation = net.correlation_matrix(activity)
@@ -106,6 +140,7 @@ for state in rec.state_labels:
             )
 
 csv_path = RESULTS_DIR / "04_sample_modularity.csv"
+# The ``with`` block closes the file automatically, even if writing fails.
 with csv_path.open("w", newline="", encoding="utf-8") as stream:
     writer = csv.DictWriter(stream, fieldnames=list(records[0]))
     writer.writeheader()
@@ -119,6 +154,11 @@ print("saved ->", csv_path)
 # same comparison across densities. Look first for the direction of the state
 # difference, then ask whether it is consistent across windows and density
 # choices. Exact values vary because the data windows and Louvain runs vary.
+#
+# The list comprehensions below filter the table. Read
+# ``[row["q_max"] for row in records if ...]`` as “collect q_max from every row
+# that satisfies these conditions.” ``np.asarray`` converts the resulting Python
+# list into a NumPy array so ``mean`` and ``std`` can be calculated directly.
 
 # %%
 colors = {"awake": "royalblue", "nrem": "crimson"}
