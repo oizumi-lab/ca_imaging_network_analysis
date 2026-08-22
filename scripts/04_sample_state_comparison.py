@@ -67,7 +67,7 @@ WINDOW_FRAMES = 1500              # frames in one non-overlapping state window
 DENSITIES = (0.02, 0.05, 0.10)   # graph densities evaluated for every window
 REFERENCE_DENSITY = 0.05          # density shown as individual window points
 MAX_WINDOWS = 4                   # maximum windows per state; None means all
-MAX_NEURONS = 2500                # maximum active neurons; None means all
+MAX_NEURONS = None                # maximum active neurons; None means all
 N_RUNS = 10                       # Louvain repeats for each graph
 GAMMA = 1.0                       # Louvain module-size resolution
 

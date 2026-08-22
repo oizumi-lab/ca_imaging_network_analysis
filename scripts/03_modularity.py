@@ -40,7 +40,7 @@
 # **fixed density**, (2) the **stochasticity** of Louvain and how to tame it, and
 # (3) the **resolution** parameter.
 #
-# ## Beginner's code map
+# ## Code map
 #
 # This script is longer because it both performs the analysis and explains it
 # with several figures. Run it from top to bottom. Important recurring names:
@@ -110,7 +110,7 @@ DEFAULT_RECORDING = {
     "anesthesia": "mouse07_ane",
 }
 WINDOW_FRAMES = {"sleep": 1500, "anesthesia": 2900}
-MAX_NEURONS = 3000  # course-size cap; None means all activity-filtered neurons
+MAX_NEURONS = None  # course-size cap; None means all activity-filtered neurons
 N_RUNS = 30         # course default; use 200 for paper-scale optimization
 PROFILE_RUNS = 10   # repetitions for each value in the short gamma sweep
 

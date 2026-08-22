@@ -66,7 +66,7 @@ RECORDING = "mouse02_sleep"      # dataset used for this worked example
 SCALES = (1, 2, 5, 10, 20, 40)  # target neurons per parcel; 1 = single cell
 WINDOW_FRAMES = 1500             # frames in one stable-state window
 MAX_WINDOWS = 2                  # maximum windows per state; None means all
-MAX_NEURONS = 2500               # maximum active neurons; None means all
+MAX_NEURONS = None               # maximum active neurons; None means all
 K = 0.05                         # keep the strongest 5% of parcel pairs
 GAMMA = 1.0                      # Louvain module-size resolution
 N_RUNS = 10                      # Louvain repeats per scale/state/window graph

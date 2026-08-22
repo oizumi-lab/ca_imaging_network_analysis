@@ -84,7 +84,7 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # %%
 RECORDING = "mouse02_sleep"  # downloaded dataset name
-MAX_NEURONS = 2500           # course-size neuron cap; None means no cap
+MAX_NEURONS = None           # course-size neuron cap; None means no cap
 REFERENCE_DENSITY = 0.05     # 0.05 = retain the strongest 5% of pairs
 
 rec = dataio.load_recording(RECORDING)

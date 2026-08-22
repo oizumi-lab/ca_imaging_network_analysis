@@ -61,7 +61,7 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # %%
 RECORDING = "mouse02_sleep"  # dataset used for this worked example
 WINDOW_FRAMES = 1500         # frames in the first stable window per state
-MAX_NEURONS = 2500           # maximum active neurons; None means all
+MAX_NEURONS = None           # maximum active neurons; None means all
 MESO_NNEI = 40               # target neurons per mesoscale parcel
 K = 0.05                     # retain the strongest 5% of node pairs
 GAMMA = 1.0                  # Louvain module-size resolution
