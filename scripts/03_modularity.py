@@ -110,7 +110,7 @@ DEFAULT_RECORDING = {
     "anesthesia": "mouse07_ane",
 }
 WINDOW_FRAMES = {"sleep": 1500, "anesthesia": 2900}
-MAX_NEURONS = None  # course-size cap; None means all activity-filtered neurons
+MAX_NEURONS = 2000  # course-size cap; None means all activity-filtered neurons
 N_RUNS = 30         # course default; use 200 for paper-scale optimization
 PROFILE_RUNS = 10   # repetitions for each value in the short gamma sweep
 

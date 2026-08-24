@@ -27,6 +27,10 @@ results/*
 logs/*.log
 !logs/.gitkeep
 
+# --- Local generated artifacts and their build/QA files ---
+/local_artifacts/
+~$*.pptx
+
 # --- Claude local (machine-specific) settings ---
 .claude/settings.local.json
 
