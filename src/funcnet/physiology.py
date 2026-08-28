@@ -181,7 +181,7 @@ def physiology_paths(
         raise FileNotFoundError(
             "Missing EEG/EMG data: "
             f"{', '.join(missing)}. Run "
-            "`poetry run python scripts/download_data.py --eeg-emg`."
+            "all cells in `scripts/00_download_data.ipynb`."
         )
     return paths
 

@@ -4,14 +4,11 @@ Tutorial toolkit for loading and preparing the version-3 dataset, visualizing
 population activity, and computing functional-network measures across
 wakefulness, sleep, and anesthesia.
 
-Typical use (scripts in scripts/ add the repo root to the path)::
+Typical use (the tutorial notebooks locate the repository before importing)::
 
     import numpy as np
 
-    import os, sys
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
     from src.funcnet import dataio, network as net, timeseries as ts
-    from src.funcnet.paths import FIG_DIR
 
     rec = dataio.load_recording("mouse07_ane")
     rows = dataio.select_neuron_rows(rec)

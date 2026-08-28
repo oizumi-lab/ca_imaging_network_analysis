@@ -245,7 +245,7 @@ def add_takeaway(slide, text, x, y, w, *, color=TEAL, height=0.72, size=13):
     )
 
 
-def add_script_badge(slide, number, label, x, y, *, color=TEAL):
+def add_notebook_badge(slide, number, label, x, y, *, color=TEAL):
     add_rect(slide, x, y, Inches(0.52), Inches(0.52), color, color, radius=True)
     add_text(
         slide,
@@ -312,7 +312,7 @@ def require_figures():
     if missing:
         formatted = "\n  - ".join(missing)
         raise FileNotFoundError(
-            "Run the numbered scripts before building the slides. Missing:\n  - "
+            "Run the numbered notebooks before building the slides. Missing:\n  - "
             f"{formatted}"
         )
 
@@ -359,8 +359,8 @@ def build_title(prs):
     )
     for index, (number, label, color) in enumerate(
         [
-            ("A", "mouse02_sleep · scripts 00–06", TEAL),
-            ("B", "all mice · scripts 07–09", GOLD),
+            ("A", "mouse02_sleep · notebooks 00–06", TEAL),
+            ("B", "all mice · notebooks 07–09", GOLD),
         ]
     ):
         y = Inches(5.10 + 0.72 * index)
@@ -435,7 +435,7 @@ def build_roadmap(prs):
             "PART B · COHORT ANALYSIS",
             "All biological mice",
             "5 sleep mice + 4 anesthesia mice",
-            "00 --all  download the cohort\n07  compare modularity across mice\n08  test the scale dependence\n09  quantify module geography\n\nSet PAPER_MODE = True for the full run.",
+            "00  download the complete dataset\n07  compare modularity across mice\n08  test the scale dependence\n09  quantify module geography\n\nSet PAPER_MODE = True for the full run.",
             GOLD,
         ),
     ]
@@ -483,13 +483,13 @@ def build_roadmap(prs):
 def build_download(prs):
     slide = add_slide(
         prs,
-        "00 · Download one real experiment",
-        eyebrow="Track A · complete example",
-        step="script 00",
+        "00 · Download the complete dataset",
+        eyebrow="Data setup",
+        step="notebook 00",
     )
     add_text(
         slide,
-        "The default download provides one complete calcium + physiology session.",
+        "Notebook 00 downloads every recording used by the tutorial and cohort analyses.",
         Inches(0.63),
         Inches(1.19),
         Inches(8.0),
@@ -498,12 +498,18 @@ def build_download(prs):
         color=SLATE,
     )
     files = [
-        ("CALCIUM", "mouse02_sleep.mat", "~1.09 GB", "6,574 neurons · 18,700 frames", TEAL),
+        (
+            "CALCIUM",
+            "10 processed recordings",
+            "~11.22 GB",
+            "sleep + anesthesia · all biological mice",
+            TEAL,
+        ),
         (
             "PHYSIOLOGY",
-            "mouse02_sleep_physiological_data.mat",
-            "~0.36 GB",
-            "5-kHz EEG + EMG · frame triggers",
+            "Synchronized EEG/EMG files",
+            "~4.06 GB",
+            "EEG + EMG · frame triggers · README",
             BLUE,
         ),
     ]
@@ -547,12 +553,12 @@ def build_download(prs):
     add_rect(slide, Inches(0.64), Inches(4.58), Inches(12.02), Inches(1.13), NAVY, NAVY, radius=True)
     add_text(
         slide,
-        "poetry run python scripts/00_download_data.py",
+        "Open scripts/00_download_data.ipynb and run all cells",
         Inches(1.03),
         Inches(4.90),
         Inches(7.0),
         Inches(0.42),
-        size=19,
+        size=16,
         color=WHITE,
         bold=True,
         font=FONT_MONO,
@@ -582,7 +588,7 @@ def build_raw_traces(prs):
         prs,
         "01 · Inspect the recording before building a graph",
         eyebrow="Track A · data literacy",
-        step="script 01",
+        step="notebook 01",
     )
     add_picture_contain(
         slide,
@@ -592,7 +598,7 @@ def build_raw_traces(prs):
         Inches(8.42),
         Inches(5.37),
     )
-    add_script_badge(slide, "01", "inspect_data.py", Inches(9.38), Inches(1.38))
+    add_notebook_badge(slide, "01", "inspect_data.ipynb", Inches(9.38), Inches(1.38))
     add_rich_lines(
         slide,
         [
@@ -631,7 +637,7 @@ def build_spatial_coverage(prs):
         prs,
         "01 · Check which cortical areas were sampled",
         eyebrow="Track A · spatial coverage",
-        step="script 01",
+        step="notebook 01",
     )
     add_picture_contain(
         slide,
@@ -675,7 +681,7 @@ def build_physiology(prs):
         prs,
         "01 · Examine the physiological basis of state labels",
         eyebrow="Track A · EEG / EMG / behavior",
-        step="script 01",
+        step="notebook 01",
     )
     add_picture_contain(
         slide,
@@ -722,7 +728,7 @@ def build_connectivity(prs):
         prs,
         "02 · Build matched-density functional networks",
         eyebrow="Track A · functional connectivity",
-        step="script 02",
+        step="notebook 02",
     )
     add_picture_contain(
         slide,
@@ -781,7 +787,7 @@ def build_modularity_pipeline(prs):
         prs,
         "03 · Detect modules with repeated Louvain optimization",
         eyebrow="Track A · modularity analysis",
-        step="script 03",
+        step="notebook 03",
     )
     add_picture_contain(
         slide,
@@ -825,7 +831,7 @@ def build_module_map(prs):
         prs,
         "03 · Functional modules can be spatially intermixed",
         eyebrow="Track A · interpret the partition",
-        step="script 03",
+        step="notebook 03",
     )
     add_picture_contain(
         slide,
@@ -866,7 +872,7 @@ def build_module_map(prs):
     )
     add_takeaway(
         slide,
-        "Spatially intermixed does not mean spatially random—quantify it in script 06.",
+        "Spatially intermixed does not mean spatially random—quantify it in notebook 06.",
         Inches(9.26),
         Inches(5.69),
         Inches(3.28),
@@ -881,7 +887,7 @@ def build_sample_compare(prs):
         prs,
         "04 · Compare Awake and NREM within mouse02",
         eyebrow="Track A · one-mouse result",
-        step="script 04",
+        step="notebook 04",
     )
     add_picture_contain(
         slide,
@@ -925,7 +931,7 @@ def build_sample_scale(prs):
         prs,
         "05 · Rebuild networks at coarser spatial scales",
         eyebrow="Track A · scale dependence",
-        step="script 05",
+        step="notebook 05",
     )
     add_picture_contain(
         slide,
@@ -969,7 +975,7 @@ def build_sample_spatial(prs):
         prs,
         "06 · Quantify how module geography changes with scale",
         eyebrow="Track A · spatial distribution",
-        step="script 06",
+        step="notebook 06",
     )
     add_picture_contain(
         slide,
@@ -1098,12 +1104,12 @@ def build_track_b(prs):
     )
     add_text(
         slide,
-        "poetry run python scripts/00_download_data.py --all",
+        "The complete cohort was downloaded by notebook 00",
         Inches(0.84),
         Inches(3.48),
         Inches(7.55),
         Inches(0.48),
-        size=18,
+        size=17,
         color=WHITE,
         bold=True,
         font=FONT_MONO,
@@ -1180,7 +1186,7 @@ def build_all_mice(prs):
         prs,
         "07 · Reproduce the state comparison across mice",
         eyebrow="Track B · population robustness",
-        step="script 07",
+        step="notebook 07",
     )
     add_picture_contain(
         slide,
@@ -1223,7 +1229,7 @@ def build_all_scale(prs):
         prs,
         "08 · Compare brain states across spatial scales",
         eyebrow="Track B · population scale analysis",
-        step="script 08",
+        step="notebook 08",
     )
     add_picture_contain(
         slide,
@@ -1271,7 +1277,7 @@ def build_all_spatial(prs):
         prs,
         "09 · Reproduce module maps and distance profiles",
         eyebrow="Track B · population spatial analysis",
-        step="script 09",
+        step="notebook 09",
     )
     add_picture_contain(
         slide,
@@ -1403,7 +1409,7 @@ def build_summary(prs):
         )
     add_takeaway(
         slide,
-        "Begin with scripts 00–06. Use 07–09 before making claims about robustness across mice.",
+        "Begin with notebooks 00–06. Use 07–09 before making claims about robustness across mice.",
         Inches(0.65),
         Inches(6.25),
         Inches(12.03),

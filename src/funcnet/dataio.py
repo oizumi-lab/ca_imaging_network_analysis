@@ -129,7 +129,7 @@ def _resolve_path(path_or_name: str | Path) -> Path:
         return cand
     raise FileNotFoundError(
         f"Could not find '{path_or_name}'. Looked in {RAW_DIR}. "
-        f"Run `python scripts/download_data.py` first."
+        "Run all cells in `scripts/00_download_data.ipynb` first."
     )
 
 
@@ -331,7 +331,7 @@ def _validate(rec: Recording) -> None:
 
 
 # ----------------------------------------------------------------------------
-# Helpers used by the analysis scripts
+# Helpers used by the analysis notebooks
 # ----------------------------------------------------------------------------
 def state_frames(rec: Recording, which: str) -> np.ndarray:
     """0-based frame indices for a state label ('awake', 'nrem', 'anesthesia')."""

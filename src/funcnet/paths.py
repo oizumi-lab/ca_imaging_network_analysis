@@ -17,7 +17,7 @@ RAW_DIR = DATA_DIR / "raw"
 PHYSIOLOGY_DIR = RAW_DIR / "eeg_emg"
 REFERENCES_DIR = PROJECT_ROOT / "references"
 
-# All script outputs (figures, csv, ...) accumulate here.
+# All notebook outputs (figures, csv, ...) accumulate here.
 RESULTS_DIR = PROJECT_ROOT / "results"
 FIG_DIR = RESULTS_DIR / "figures"
 

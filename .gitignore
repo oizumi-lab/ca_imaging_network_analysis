@@ -15,7 +15,7 @@ raw_documents/
 # --- Generated tutorial slide deck ---
 /documents/functional_network_tutorial.pptx
 
-# --- Data (large; downloaded separately, see scripts/00_download_data.py) ---
+# --- Data (large; downloaded separately, see scripts/00_download_data.ipynb) ---
 data/
 
 # --- Generated results (figures, csv, ...) ---
