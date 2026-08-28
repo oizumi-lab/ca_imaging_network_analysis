@@ -69,7 +69,7 @@ Run scripts `00`–`06` in order:
 | Script | Question answered | Main output |
 |---|---|---|
 | `00_download_data.py` | Which files are needed for the example? | Calcium and synchronized EEG/EMG data |
-| `01_inspect_data.py` | What was recorded, where were neurons sampled, and do the state labels agree with the physiology? | Raw ΔF/F traces, atlas-colored neuron map, raster, EEG spectrogram, EMG, and state strip |
+| `01_inspect_data.py` | What was recorded, where were neurons sampled, and do the state labels agree with the physiology? | Raw ΔF/F traces, atlas-colored neuron map, population-activity trace, brain-area-grouped raster, EEG spectrogram, EMG, and state strip |
 | `02_functional_connectivity.py` | Which neuron pairs have similar activity, and how can states be compared with the same edge count? | Correlation matrices and equal-density graphs |
 | `03_modularity.py` | Does each graph contain groups with more internal edges than expected? | Repeated-Louvain partitions, modularity Q, and module maps |
 | `04_sample_state_comparison.py` | Does the Awake–NREM difference recur across time windows and density choices? | Within-recording state comparison |

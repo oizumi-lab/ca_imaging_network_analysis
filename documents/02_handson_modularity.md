@@ -33,10 +33,12 @@ The default download contains:
 ### 01 — inspect neural activity and state physiology
 
 Run `01_inspect_data.py` cell by cell. The script reports dimensions and the
-active-neuron count, then makes three figures:
+active-neuron count, then makes four figures:
 
 - full-session raw ΔF/F traces from a reproducible neuron sample;
-- all neuron positions colored by layer-collapsed Allen cortical area; and
+- all neuron positions colored by layer-collapsed Allen cortical area;
+- population activity above a deconvolved-event raster grouped and
+  activity-ranked within those cortical areas; and
 - an aligned event raster, EEG spectrogram, EMG envelope, and state strip.
 
 The physiology panels help assess whether the deposited state labels are

@@ -12,12 +12,13 @@
 # Before calculating anything, we need to know what was measured. A result can
 # be misleading if, for example, a recording contains too little Awake data, the
 # neural traces contain long gaps, or the state labels disagree with the EEG and
-# EMG. This script therefore answers four basic questions:
+# EMG. This script therefore answers five basic questions:
 #
 # 1. How many neurons and time points were recorded?
 # 2. What does activity from individual neurons look like?
 # 3. Which cortical areas were sampled?
-# 4. Do the EEG and EMG patterns make the deposited sleep-state labels plausible?
+# 4. How is population activity distributed across those cortical areas over time?
+# 5. Do the EEG and EMG patterns make the deposited sleep-state labels plausible?
 #
 # Scripts 01--06 use this same recording. The optional supplemental movie also
 # uses it. This lets you trace every later network quantity back to the data
@@ -76,6 +77,8 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # - ``TRACE_SEED`` makes the random trace selection repeatable. A different
 #   integer displays a different reproducible sample.
 # - ``DISPLAY_BIN_SECONDS`` changes only the raster display resolution.
+# - ``POPULATION_SMOOTH_SECONDS`` controls smoothing of the active-neuron
+#   percentage above the brain-area-grouped raster.
 # - ``EEG_MAX_FREQUENCY_HZ`` and ``EEG_WINDOW_SECONDS`` control the EEG figure.
 #   They do not modify the calcium-network calculations in later scripts.
 
@@ -84,6 +87,7 @@ RECORDING = "mouse01_sleep"  # dataset name, without a file extension
 TRACE_NEURONS = 100          # number of randomly selected raw traces to plot
 TRACE_SEED = 7               # integer seed for a reproducible random selection
 DISPLAY_BIN_SECONDS = 1.0    # temporal width of one raster-display column
+POPULATION_SMOOTH_SECONDS = 5.0  # smoothing width for population activity
 EEG_MAX_FREQUENCY_HZ = 25.0  # highest EEG frequency shown
 EEG_WINDOW_SECONDS = 4.0     # time span used for each spectrogram estimate
 
@@ -312,7 +316,207 @@ plt.show()
 print("saved ->", spatial_path)
 
 # %% [markdown]
-# ## Figure 3 — raster, EEG spectrogram, EMG, and deposited state labels
+# ## Figure 3 — population activity and a brain-area-grouped raster
+#
+# The top panel summarizes population activity as the percentage of neurons with
+# a positive deconvolution sample at each imaging frame. A short moving average
+# makes the full-session trend visible without changing any later network input.
+# Smoothing is performed separately within each continuous acquisition segment,
+# so a microscope break cannot blend activity from two disconnected periods.
+#
+# The raster uses the same positive deconvolution events, combined into short
+# display bins. Neurons are grouped by their layer-collapsed atlas region and
+# ranked from more to less active within each region. The colored strip and
+# horizontal separators mark region boundaries; they do not color the activity
+# events themselves. Faint background colors and the bottom strip show the
+# deposited brain states.
+#
+# This is a descriptive view. An apparent regional difference can reflect the
+# number of sampled neurons, event rate, or visual density and should be tested
+# quantitatively before it is interpreted as a biological effect.
+
+# %%
+raster, active_counts, bin_frames, activity_order, bin_centers = (
+    viz.binned_spike_raster(
+        rec.spike_deconv,
+        rec.fs,
+        DISPLAY_BIN_SECONDS,
+        rec.boundary_ind,
+        rec.state,
+    )
+)
+bin_centers_min = bin_centers / rec.fs / 60
+
+# ``raster`` is already activity-ranked. Group positions from that ordering by
+# atlas region to retain the within-region activity ranking.
+activity_ranked_regions = display_regions[activity_order]
+grouped_positions = np.concatenate(
+    [
+        np.flatnonzero(activity_ranked_regions == region)
+        for region in region_order
+    ]
+)
+grouped_raster = raster[grouped_positions]
+grouped_neuron_rows, grouped_occupied_bins = np.nonzero(grouped_raster)
+
+region_limits = []
+region_start = 0
+for region in region_order:
+    region_stop = region_start + np.count_nonzero(display_regions == region)
+    region_limits.append((region, region_start, region_stop))
+    region_start = region_stop
+
+population_percent = 100 * active_counts / rec.n_neurons
+population_smooth_frames = max(
+    1,
+    int(round(POPULATION_SMOOTH_SECONDS * rec.fs)),
+)
+population_percent_smoothed = ts.segmented_moving_average(
+    population_percent,
+    population_smooth_frames,
+    rec.boundary_ind,
+)
+population_mean = float(np.mean(population_percent))
+
+state_labels = dict(viz.DEFAULT_STATE_LABELS)
+state_labels.update(
+    {"awake": "Wake", "quiet_awake": "Quiet awake", "nrem": "NREM", "rem": "REM"}
+)
+state_short_labels = dict(viz.DEFAULT_STATE_SHORT_LABELS)
+state_short_labels.update(
+    {"awake": "W", "quiet_awake": "Q", "nrem": "N", "rem": "R"}
+)
+
+fig = plt.figure(figsize=(15.5, 10), constrained_layout=True)
+grid = fig.add_gridspec(
+    4,
+    2,
+    width_ratios=(0.022, 1),
+    height_ratios=(1.15, 5.3, 0.42, 0.85),
+    hspace=0.06,
+    wspace=0.025,
+)
+population_ax = fig.add_subplot(grid[0, 1])
+region_ax = fig.add_subplot(grid[1, 0])
+grouped_raster_ax = fig.add_subplot(grid[1, 1], sharex=population_ax)
+grouped_state_ax = fig.add_subplot(grid[2, 1], sharex=population_ax)
+region_legend_ax = fig.add_subplot(grid[3, 1])
+
+viz.shade_states(population_ax, timeline_view, alpha=0.09)
+for start, stop in acquisition_segments:
+    population_ax.plot(
+        time_min[start:stop],
+        population_percent_smoothed[start:stop],
+        color="0.12",
+        lw=0.9,
+        zorder=2,
+    )
+population_ax.axhline(
+    population_mean,
+    color="0.4",
+    lw=0.8,
+    ls=(0, (3, 2)),
+    zorder=1,
+)
+population_ax.set_xlim(0, duration_min)
+population_ax.set_ylim(bottom=0)
+population_ax.set_ylabel("active neurons\n(%)")
+population_ax.tick_params(axis="x", labelbottom=False)
+population_ax.text(
+    0.995,
+    0.92,
+    f"{POPULATION_SMOOTH_SECONDS:g}-s moving average · dashed = session mean",
+    transform=population_ax.transAxes,
+    ha="right",
+    va="top",
+    fontsize=7,
+    color="0.25",
+)
+viz.mark_acquisition_boundaries(population_ax, timeline_view)
+
+viz.shade_states(grouped_raster_ax, timeline_view, alpha=0.075)
+grouped_raster_ax.scatter(
+    bin_centers_min[grouped_occupied_bins],
+    grouped_neuron_rows,
+    s=0.08,
+    color="black",
+    alpha=0.30,
+    marker=".",
+    linewidths=0,
+    rasterized=True,
+    zorder=2,
+)
+for _region, _start, stop in region_limits[:-1]:
+    grouped_raster_ax.axhline(stop - 0.5, color="white", lw=0.6, zorder=3)
+grouped_raster_ax.set_xlim(0, duration_min)
+grouped_raster_ax.set_ylim(rec.n_neurons - 0.5, -0.5)
+grouped_raster_ax.set_yticks((0, rec.n_neurons - 1))
+grouped_raster_ax.set_yticklabels(("1", f"{rec.n_neurons:,}"))
+grouped_raster_ax.set_ylabel(
+    f"all {rec.n_neurons:,} neurons\n(grouped by atlas region)"
+)
+grouped_raster_ax.tick_params(axis="x", labelbottom=False)
+grouped_raster_ax.text(
+    0.995,
+    0.02,
+    f"activity-ranked within each region · display bins ≤ {bin_frames / rec.fs:.2f} s",
+    transform=grouped_raster_ax.transAxes,
+    ha="right",
+    va="bottom",
+    fontsize=7,
+    color="0.25",
+    bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.72, "pad": 1},
+    zorder=4,
+)
+viz.mark_acquisition_boundaries(grouped_raster_ax, timeline_view)
+
+for region, start, stop in region_limits:
+    region_ax.axhspan(
+        start - 0.5,
+        stop - 0.5,
+        color=viz.CORTICAL_REGION_COLORS[region],
+        lw=0,
+    )
+region_ax.set_xlim(0, 1)
+region_ax.set_ylim(rec.n_neurons - 0.5, -0.5)
+region_ax.set_xticks([])
+region_ax.set_yticks([])
+region_ax.set_ylabel("atlas\nregion", fontsize=8)
+for spine in region_ax.spines.values():
+    spine.set_visible(False)
+
+viz.plot_state_strip(
+    grouped_state_ax,
+    timeline_view,
+    state_labels=state_labels,
+    short_labels=state_short_labels,
+)
+grouped_state_ax.set_xlabel("recorded time (min)")
+
+region_legend_ax.set_axis_off()
+region_legend_ax.legend(
+    handles=viz.cortical_region_legend_handles(region_order),
+    loc="center",
+    ncol=min(6, len(region_order)),
+    frameon=False,
+    title="Atlas region (activity-ranked within each region)",
+    fontsize=8,
+    title_fontsize=8,
+    handletextpad=0.3,
+    columnspacing=1.2,
+)
+
+fig.suptitle(
+    f"{rec.name}: brain-area-grouped deconvolved activity across the full recording",
+    fontsize=15,
+)
+grouped_raster_path = FIG_DIR / "01_brain_area_grouped_raster.png"
+fig.savefig(grouped_raster_path, dpi=160, bbox_inches="tight")
+plt.show()
+print("saved ->", grouped_raster_path)
+
+# %% [markdown]
+# ## Figure 4 — raster, EEG spectrogram, EMG, and deposited state labels
 #
 # Frame-trigger synchronization aligns the separate 5-kHz physiology recording
 # to the calcium frames. The EEG panel shows 0.5--25-Hz spectral power. The EMG
@@ -330,17 +534,7 @@ print("saved ->", spatial_path)
 # setting into the matching function call before interpreting the output.
 
 # %%
-# A function may return several values. ``_`` is the conventional name for a
-# returned value that this script intentionally does not use.
-raster, _, bin_frames, _, bin_centers = viz.binned_spike_raster(
-    rec.spike_deconv,
-    rec.fs,
-    DISPLAY_BIN_SECONDS,
-    rec.boundary_ind,
-    rec.state,
-)
 neuron_rows, occupied_bins = np.nonzero(raster)
-bin_centers_min = bin_centers / rec.fs / 60
 
 physiology = physio.load_physiology(rec.name)
 alignment = physio.align_frame_triggers(
@@ -443,10 +637,6 @@ emg_ax.text(
 )
 viz.mark_acquisition_boundaries(emg_ax, timeline_view)
 
-state_labels = dict(viz.DEFAULT_STATE_LABELS)
-state_labels.update({"awake": "Wake", "quiet_awake": "Quiet awake", "nrem": "NREM", "rem": "REM"})
-state_short_labels = dict(viz.DEFAULT_STATE_SHORT_LABELS)
-state_short_labels.update({"awake": "W", "quiet_awake": "Q", "nrem": "N", "rem": "R"})
 viz.plot_state_strip(
     state_ax,
     timeline_view,
@@ -463,5 +653,7 @@ print("saved ->", physiology_path)
 # ## Takeaway
 #
 # We have one complete, spatially resolved neural population plus independently
-# recorded physiology and state labels. Scripts 02--06 use the same recording so
-# every analysis step can be traced back to this concrete dataset.
+# recorded physiology and state labels. Grouping the event raster by atlas region
+# makes regional sampling explicit, while the population trace shows how widely
+# activity rises and falls across the full session. Scripts 02--06 use the same
+# recording so every later analysis step can be traced back to this dataset.
