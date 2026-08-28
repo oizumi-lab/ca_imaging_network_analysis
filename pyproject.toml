@@ -1,7 +1,7 @@
 [project]
 name = "ca-imaging-network-analysis"
 version = "0.1.0"
-description = "Hands-on materials for state-dependent functional network analysis of version-3 two-photon calcium imaging and EEG/EMG data across wakefulness, sleep, and anesthesia (Kiyooka & Oomoto et al., Cell Reports 2026)."
+description = "Step-by-step tutorial for state-dependent functional-network analysis of version-3 two-photon calcium imaging and EEG/EMG data across wakefulness, sleep, and anesthesia (Kiyooka & Oomoto et al., Cell Reports 2026)."
 authors = [{ name = "Masafumi Oizumi", email = "c-oizumi@g.ecc.u-tokyo.ac.jp" }]
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

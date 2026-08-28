@@ -83,10 +83,10 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # ## Settings and ``PAPER_MODE``
 #
 # ``PAPER_MODE`` is one Boolean switch for the expensive cohort calculations.
-# ``False`` is the recommended teaching/debugging mode; ``True`` is the
+# ``False`` is the recommended preview/debugging mode; ``True`` is the
 # paper-scale research mode. Changing it automatically makes these choices:
 #
-# | setting | teaching mode (False) | paper mode (True) |
+# | setting | preview mode (False) | paper mode (True) |
 # | --- | --- | --- |
 # | ``N_RUNS`` | 20 Louvain searches | 200 searches |
 # | ``N_WINDOWS`` | first window/state | every complete window (``None``) |
@@ -97,7 +97,7 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # bins, or parcel size. It greatly increases runtime because single-cell
 # networks contain thousands of nodes; a complete paper-mode run may require
 # many hours or days. Develop extensions with ``False`` and use ``True`` only for
-# a final unattended run. Numerical results can differ because teaching mode
+# a final unattended run. Numerical results can differ because preview mode
 # samples fewer neurons, windows, and stochastic searches.
 #
 # Two details are intentionally independent of the switch. Example maps always
@@ -105,7 +105,7 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # maps always use ``N_RUNS_MESO=200`` because their parcel graphs are small.
 
 # %%
-PAPER_MODE = False  # False = teaching run; True = long full-data calculation
+PAPER_MODE = False  # False = preview; True = long full-data calculation
 K = 0.05            # connection density: retain the strongest 5% of pairs
 GAMMA = 1.0         # Louvain module-size resolution
 N_RUNS = 200 if PAPER_MODE else 20  # repeats per cohort graph
@@ -380,18 +380,3 @@ plt.show()
 # The farthest-distance bins contain fewer pairs and sometimes rebound, so these
 # profiles are descriptive until accompanied by pair counts, spatial/label nulls,
 # and partition-stability uncertainty.
-
-# %% [markdown]
-# ## Practice — summarize the distance dependence
-#
-# For each biological mouse, calculate a localization contrast equal to the
-# value in the nearest distance bin minus the value in the farthest finite bin.
-# Do this separately for the single-cell and parcel scales, then display the
-# mouse-level values in a paired plot.
-#
-# Explain what a positive contrast means and why you should inspect the number of
-# node pairs in the farthest bin before interpreting a large value.
-#
-# **Where to start:** ``per_mouse_profiles`` returns one distance curve per
-# biological mouse. Check for finite values before choosing the final bin, and
-# keep sleep and anesthesia cohorts separate.

@@ -55,10 +55,10 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 # ## Settings you may modify
 #
 # - ``SCALES`` gives neurons per spatial parcel. ``1`` is the ungrouped network.
-# - ``MAX_WINDOWS`` and ``MAX_NEURONS`` are teaching-size runtime limits.
+# - ``MAX_WINDOWS`` and ``MAX_NEURONS`` are preview-size runtime limits.
 # - ``K``, ``GAMMA``, and ``N_RUNS`` control graph thresholding and Louvain in
 #   exactly the same way as scripts 03--04.
-# - Keep ``WINDOW_FRAMES`` matched to the dataset unless your project explicitly
+# - Keep ``WINDOW_FRAMES`` matched to the dataset unless the analysis explicitly
 #   studies a different temporal scale.
 
 # %%
@@ -66,7 +66,7 @@ RECORDING = "mouse02_sleep"      # dataset used for this worked example
 SCALES = (1, 2, 5, 10, 20, 40)  # target neurons per parcel; 1 = single cell
 WINDOW_FRAMES = 1500             # frames in one stable-state window
 MAX_WINDOWS = 2                  # maximum windows per state; None means all
-MAX_NEURONS = None               # maximum active neurons; None means all
+MAX_NEURONS = 1000              # maximum active neurons; None means all
 K = 0.05                         # keep the strongest 5% of parcel pairs
 GAMMA = 1.0                      # Louvain module-size resolution
 N_RUNS = 10                      # Louvain repeats per scale/state/window graph
@@ -236,17 +236,3 @@ print("saved ->", figure_path)
 # nodes remain. That instability is a useful warning against treating one mouse
 # or a very small parcel graph as the population result. Script 08 repeats the
 # analysis across all mice with mouse-level uncertainty.
-
-# %% [markdown]
-# ## Exercise 5 — find where the state contrast becomes smallest
-#
-# Calculate the mean ``Awake − NREM`` modularity contrast at every value in
-# ``SCALES``. Identify the scale with the smallest *absolute* contrast and report
-# how many network nodes remain there.
-#
-# Make a two-column result table containing parcel size and state contrast. Then
-# explain why a very small graph at a coarse scale may give a less stable result.
-#
-# **Where to start:** ``means_by_state`` and ``contrast`` were constructed
-# for the figure above. Node counts are stored in each row of ``records``. You
-# will need to combine those two pieces of information.

@@ -81,7 +81,7 @@ GAMMA = 1.0                       # Louvain module-size resolution
 #
 # For each window, the script repeats the entire pipeline from script 03. Each
 # row appended to ``records`` is one combination of state, window, and density;
-# keeping this tidy table makes the later plotting and practice analysis easier.
+# keeping this tidy table makes the later plotting and reuse easier.
 #
 # Functions used in this step:
 #
@@ -238,19 +238,3 @@ print("saved ->", figure_path)
 # NREM modularity is higher in this full example recording across windows and
 # several density choices. Because all points come from one mouse, use script 07
 # before making a population-level claim.
-
-# %% [markdown]
-# ## Exercise 4 — calculate the state contrast
-#
-# Using the completed ``records`` list, calculate mean Q separately for Awake and
-# NREM at each density. Then calculate ``NREM − Awake`` and plot that contrast
-# against density with a horizontal zero line.
-#
-# Answer two questions in words:
-#
-# 1. Does the contrast keep the same sign across the tested densities?
-# 2. Why can these window-level values not be treated as independent mice?
-#
-# **Where to start:** the figure above already demonstrates how to filter
-# ``records`` by state and density. Extend that pattern to calculate the
-# difference requested here.

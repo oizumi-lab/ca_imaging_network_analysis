@@ -6,8 +6,8 @@
 # which neuron pairs are linked, but it does not yet summarize the graph's
 # organization. We now ask whether those links form groups.
 #
-# Imagine a classroom friendship network. If most friendships lie within a few
-# groups and relatively few connect the groups, the network is **modular**. Here,
+# Imagine a social network. If most connections lie within a few groups and
+# relatively few connect the groups, the network is **modular**. Here,
 # the nodes are neurons and the edges are the strongest functional relationships.
 # A module is therefore a group of neurons whose retained relationships occur
 # more often within the group than expected from their edge counts.
@@ -30,10 +30,10 @@
 # - $\gamma$ = **resolution**: $\gamma>1$ → smaller modules, $\gamma<1$ → larger.
 # - $c_i$ = the module neuron $i$ is assigned to; $\delta=1$ if same module.
 #
-# You do not need to derive this equation during the hands-on session. Read it
-# as a comparison between the observed within-module edges and the number
-# expected from a degree-matched reference model. A larger Q means that the
-# proposed partition separates the graph more strongly under those settings.
+# To follow the tutorial, read this equation as a comparison between the
+# observed within-module edges and the number expected from a degree-matched
+# reference model. A larger Q means that the proposed partition separates the
+# graph more strongly under those settings.
 #
 # The **Louvain algorithm** searches assignments $c$ to maximise $Q$. This script
 # introduces three practical choices: (1) thresholding at a
@@ -55,8 +55,8 @@
 #
 # A dictionary such as ``state_results[label]`` groups all arrays and results for
 # one state. Functions introduced below package repeated display operations.
-# Their docstrings describe inputs and returned values; you can call the same
-# functions from a new exercise cell without copying their internal code.
+# Their docstrings describe inputs and returned values so the same functions can
+# be reused without copying their internal code.
 
 # %%
 import argparse
@@ -110,8 +110,8 @@ DEFAULT_RECORDING = {
     "anesthesia": "mouse07_ane",
 }
 WINDOW_FRAMES = {"sleep": 1500, "anesthesia": 2900}
-MAX_NEURONS = 2000  # course-size cap; None means all activity-filtered neurons
-N_RUNS = 30         # course default; use 200 for paper-scale optimization
+MAX_NEURONS = 2000  # interactive cap; None means all activity-filtered neurons
+N_RUNS = 30         # preview default; use 200 for paper-scale optimization
 PROFILE_RUNS = 10   # repetitions for each value in the short gamma sweep
 
 # ``argparse`` lets terminal users override settings without editing this file,
@@ -566,19 +566,3 @@ plt.show()
 # NREM/Anesthesia window. Script ``04_sample_state_comparison.py`` repeats this
 # across all complete windows of the example recording. Script
 # ``07_all_mice_modularity.py`` then tests robustness across animals.
-
-# %% [markdown]
-# ## Exercise 3 — change the module-size resolution
-#
-# ``gamma`` controls the scale at which Louvain searches for modules. Compare
-# ``gamma=0.8``, ``1.0``, and ``1.2`` for one state. Use at least five Louvain
-# runs per value and record the number of modules in the max-Q partition.
-#
-# Predict the direction of the module-count change before running the analysis.
-# Use module counts for your interpretation: Q values calculated with different
-# gamma values use different null-model penalties and are not directly
-# interchangeable scores.
-#
-# **Where to start:** adapt the existing “resolution parameter γ” loop.
-# You only need to store its outputs and make a small gamma-versus-module-count
-# plot.

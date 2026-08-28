@@ -27,7 +27,7 @@
 # ``|r|``, as in script 03), take the **max-Q** Louvain partition, and compare
 # states across a range of densities.
 #
-# **This script produces the talk-style comparison figure**: one modularity-Q
+# **This script produces a recording-level comparison figure**: one modularity-Q
 # dot per complete time window for each recording, separately for Wakefulness vs
 # NREM and Wakefulness vs anesthesia. The "Average" column contains one pair of
 # window-averaged values per recording, joined across states. A second figure
@@ -76,10 +76,10 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # ## Settings and ``PAPER_MODE``
 #
 # ``PAPER_MODE`` is a Boolean switch: a Boolean is either ``False`` or ``True``.
-# Keep it ``False`` while learning, editing, or debugging. Set it to ``True``
-# only when you intend to start the full research-scale calculation.
+# Keep it ``False`` for a responsive preview. Set it to ``True`` only when you
+# intend to start the full research-scale calculation.
 #
-# With ``PAPER_MODE = False`` (teaching mode), this script uses:
+# With ``PAPER_MODE = False`` (preview mode), this script uses:
 #
 # - at most 3,000 active neurons per recording;
 # - 5 Louvain repeats per graph;
@@ -98,8 +98,8 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # The method is identical in both modes; only the amount of data and repeated
 # optimization changes. On the complete downloaded dataset there are 72 state
 # windows, so paper mode requests 72 × 9 × 200 = 129,600 Louvain searches. It can
-# take multiple days on a laptop. Use teaching mode to develop an exercise, then
-# launch paper mode only for a final unattended run. The two modes can give
+# take multiple days on a laptop. Inspect the preview results before launching
+# paper mode as an unattended run. The two modes can give
 # different numerical estimates because neuron/window subsampling changes the
 # estimated networks.
 #
@@ -115,7 +115,7 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # nulls when extending the workflow to new biological claims.
 
 # %%
-PAPER_MODE = False  # False = responsive teaching run; True = multi-day full run
+PAPER_MODE = False  # False = responsive preview; True = multi-day full run
 SLEEP_WINDOW = 1500  # frames per stable-state window in sleep recordings
 ANE_WINDOW = 2900    # frames per stable-state window in anesthesia recordings
 DENSITIES = (
@@ -272,7 +272,7 @@ def recording_summary(rec_states, state, measure, density=None, max_windows=None
     ``rec_states`` is one recording entry from ``sleep_data`` or ``ane_data``.
     ``measure`` is ``"Q"`` or ``"nmod"``. Pass one ``density`` to summarize
     that graph density, or leave it ``None`` to average all densities. An
-    optional ``max_windows`` cap keeps comparisons matched to teaching mode.
+    optional ``max_windows`` cap keeps preview calculations responsive.
     """
     densities = DENSITIES if density is None else [density]
     vals = []
@@ -506,30 +506,16 @@ for name, data, groups, other in [
           f"± {delta_se:.3f} SE, n={delta.size} mice)")
 
 # %% [markdown]
-# ## Takeaway & extensions
-# In this teaching-sized analysis, the raw single-cell graphs show higher
+# ## Takeaway and extensions
+# In this preview-sized analysis, the raw single-cell graphs show higher
 # modularity during sleep and anesthesia. The mouse-level summaries avoid treating
 # windows, densities, or repeated days as independent observations, but raw Q is
 # still an estimated-network statistic rather than a calibrated measure of
-# coupling. Natural next steps for the course:
+# coupling. Natural extensions include:
 # - **Spatial scale**: coarse-grain neurons into groups and check the effect
 #   disappears at the mesoscale (paper Fig. 7).
 # - **Per-neuron contribution** $Q_i$ and how degree relates to modularity (Fig. 4).
 # - **Module stability** over time (Fig. 6) and consensus partitions.
 # Set ``PAPER_MODE = True`` to use all selected neurons, 200 Louvain runs, the
 # wider density range, and every available density-curve window. This is a long
-# research run rather than an in-class exercise.
-
-# %% [markdown]
-# ## Practice — inspect the effect of biological averaging
-#
-# At ``REF_DENSITY``, make a table with one row per biological mouse and columns
-# for Awake Q, NREM or Anesthesia Q, and the paired difference. For sleep Mouse 4,
-# first average its two recording days so it contributes only one row.
-#
-# Compare this table with the window-level points in Figure 1. Explain why the
-# number of plotted windows is not the sample size for a cohort-level statement.
-#
-# **Where to start:** ``paired_mouse_effects`` already returns the three values
-# needed for each dataset. The mouse-group definitions near the settings show
-# which recordings belong to the same biological mouse.
+# research run intended for unattended execution.

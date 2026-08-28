@@ -4,7 +4,7 @@
 # ## Where this script fits
 # Scripts 05 and 06 compared selected spatial scales. A movie lets you follow the
 # complete transition from single neurons to local population averages. It is
-# the final synthesis of the hands-on workflow:
+# a visual synthesis of the numbered workflow:
 #
 # ```text
 # activity → equal-density networks → modules → spatial scale → module geography
@@ -62,7 +62,7 @@ warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 # %% [markdown]
 # ## Settings
 #
-# The defaults use the course recording, its NREM window, 2,500 active neurons,
+# The defaults use the example recording, its NREM window, 2,500 active neurons,
 # and Q-max clustering over 20 Louvain runs. Set ``DATASET = "anesthesia"`` to use
 # an anesthesia recording (for example, ``RECORDING = "mouse05_ane"``) and
 # choose ``STATE = "awake"`` or ``"anesthesia"``. Sleep supports ``"awake"``
@@ -73,11 +73,11 @@ warnings.filterwarnings("ignore", message="invalid value encountered in divide")
 # %%
 SCALES = (1, 2, 5, 10, 20, 30, 40)
 DATASET = "sleep"  # "sleep" or "anesthesia"
-RECORDING = "mouse02_sleep"  # complete course recording downloaded by script 00
+RECORDING = "mouse02_sleep"  # complete example recording downloaded by script 00
 STATE = "nrem"  # sleep: "awake"/"nrem"; anesthesia: "awake"/"anesthesia"
 WINDOW = None  # None selects 1500 frames for sleep or 2900 for anesthesia
 WINDOW_START = 0  # offset within the selected state's usable frames
-MAX_NEURONS = 2500  # course runtime; set None to use every active neuron
+MAX_NEURONS = 2500  # responsive preview; set None to use every active neuron
 WINDOW_FRAMES = {"sleep": 1500, "ane": 2900}
 DEFAULT_RECORDINGS = {"sleep": "mouse02_sleep", "anesthesia": "mouse05_ane"}
 DATA_INFO = {"sleep": "sleep", "anesthesia": "ane"}
@@ -88,7 +88,7 @@ VALID_STATES = {
 
 K = 0.05
 GAMMA = 1.0
-N_RUNS = 20  # course default; use 200 for the paper-scale optimization
+N_RUNS = 20  # preview default; use 200 for paper-scale optimization
 CLUSTERING_METHOD = "qmax"  # "qmax" (default) or "consensus"
 CONSENSUS_REPS = 10
 LOUVAIN_SEED = 12345
@@ -668,7 +668,7 @@ color_ids = cross_scale_color_ids(scale_maps)
 # ## Static overview for the tutorial slides
 #
 # The movie is useful interactively; this contact sheet records the same exact
-# partitions in a single reproducible figure for the course deck.
+# partitions in a single reproducible tutorial figure.
 
 # %%
 max_color_id = max(int(ids.max()) for ids in color_ids.values())
@@ -705,28 +705,6 @@ overview_path = FIG_DIR / f"multiscale_overview_{recording_name}_{state}.png"
 fig.savefig(overview_path, dpi=160, bbox_inches="tight")
 plt.show()
 print(f"Saved: {overview_path}", flush=True)
-
-# %% [markdown]
-# ## Supplemental exercise — compare the scale transition between states
-#
-# Extend the analysis so that the static overview compares Awake and NREM using
-# the same neuron rows, window length, density, gamma, and spatial scales. Create
-# either:
-#
-# - two aligned contact sheets, one per state; or
-# - curves of Q and module count versus spatial scale for both states.
-#
-# Organize the comparison in small steps and verify these scientific
-# requirements before interpreting the output:
-#
-# 1. both states use the same selected neurons and number of frames;
-# 2. the graph density remains fixed at every scale; and
-# 3. raw Louvain module numbers are not interpreted as matching identities across
-#    independently estimated states.
-#
-# In your final figure caption, state whether the animation represents changing
-# spatial scale or changing time.
-
 
 # %% [markdown]
 # ## Step 5 — render the movie

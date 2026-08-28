@@ -1,7 +1,7 @@
-"""Loader for the RIKEN version-3 calcium-imaging course dataset.
+"""Loader for the RIKEN version-3 calcium-imaging dataset.
 
 The loader exposes each recording through one clean ``Recording`` object so the
-course analyses do not have to handle MATLAB storage details directly.
+tutorial analyses do not have to handle MATLAB storage details directly.
 
 Two gotchas this module handles for you
 --------------------------------------

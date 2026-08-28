@@ -10,7 +10,7 @@
 
 ## Reference code (MATLAB)
 - https://github.com/oizumi-lab/mouse_network_2P — full analysis pipeline used in
-  the paper. The Python course scripts provide the loading and organization
+  the paper. The Python tutorial scripts provide the loading and organization
   needed for the current release.
 - Brain Connectivity Toolbox (the `community_louvain` source): https://sites.google.com/site/bctnet/
 

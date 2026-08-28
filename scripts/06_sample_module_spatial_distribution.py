@@ -61,7 +61,7 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # %%
 RECORDING = "mouse02_sleep"  # dataset used for this worked example
 WINDOW_FRAMES = 1500         # frames in the first stable window per state
-MAX_NEURONS = None           # maximum active neurons; None means all
+MAX_NEURONS = 2000           # maximum active neurons; None means all
 MESO_NNEI = 40               # target neurons per mesoscale parcel
 K = 0.05                     # retain the strongest 5% of node pairs
 GAMMA = 1.0                  # Louvain module-size resolution
@@ -222,21 +222,3 @@ print("saved ->", figure_path)
 # Functional segregation at single-cell resolution does not mean local spatial
 # segregation. Spatially localized modules emerge after averaging nearby cells.
 # Script 09 checks the same result across all recordings.
-
-# %% [markdown]
-# ## Exercise 6 — create a module-localization contrast
-#
-# Define a simple localization contrast as:
-#
-# ``same-module probability at 0–500 µm − probability at the farthest valid bin``.
-#
-# Calculate this quantity for both states at the single-cell and 40-neuron-parcel
-# scales. A larger positive value indicates stronger spatial localization.
-# Present the four results in a table and explain which scale appears more
-# localized.
-#
-# **Where to start:** the required arrays are already stored in
-# ``profiles[state]["single"]`` and ``profiles[state]["meso"]``. Check for
-# non-finite values before choosing the farthest bin. Whatever approach you use,
-# verify that the selected bin and subtraction direction match the definition
-# above.

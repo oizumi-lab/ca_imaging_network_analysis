@@ -1,6 +1,6 @@
-"""Download the data used by the CSHA modularity hands-on.
+"""Download the data used by the functional-network tutorial.
 
-The default course download is one complete version-3 sleep recording and its
+The default download is one complete version-3 sleep recording and its
 synchronized EEG/EMG file:
 
     poetry run python scripts/00_download_data.py

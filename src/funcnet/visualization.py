@@ -1,4 +1,4 @@
-"""Focused plotting helpers used by the modularity hands-on.
+"""Focused plotting helpers used by the modularity tutorial.
 
 Display binning in this module is only for visualization. Network estimation
 uses the unbinned smoothed-deconvolution signals in :mod:`funcnet.network`.
@@ -40,7 +40,7 @@ DEFAULT_STATE_SHORT_LABELS = {
     "anesthesia": "Anesthesia",
 }
 
-# Exact layer-collapsed Allen-atlas categories used throughout the course.
+# Exact layer-collapsed Allen-atlas categories used throughout the tutorial.
 # Related areas share color families: motor greens, somatosensory warm colors,
 # retrosplenial blues, and visual purples.
 CORTICAL_REGION_COLORS = {

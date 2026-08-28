@@ -1,12 +1,11 @@
-"""Build the CSHA modularity hands-on slide deck from generated figures.
+"""Build the functional-network tutorial slide deck from generated figures.
 
 Run the numbered analyses first, then build the deck with:
 
     poetry run python documents/build_handson_slides.py
 
-The source talk ``CSHA_082426.pptx`` is deliberately not opened or modified by
-this script.  It remains an ignored local reference; this builder creates a
-small, course-specific deck that can be regenerated from repository outputs.
+The builder uses only version-controlled text and generated analysis figures,
+so the slide deck can be regenerated from repository outputs.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from pptx.util import Inches, Pt
 
 ROOT = Path(__file__).resolve().parents[1]
 FIGURES = ROOT / "results" / "figures"
-OUTPUT = ROOT / "documents" / "CSHA_handson_tutorial.pptx"
+OUTPUT = ROOT / "documents" / "functional_network_tutorial.pptx"
 
 SLIDE_W = Inches(13.333)
 SLIDE_H = Inches(7.5)
@@ -122,7 +121,7 @@ def add_footer(slide, step=None):
     add_rect(slide, Inches(0.55), Inches(7.12), Inches(12.23), Inches(0.012), LINE)
     add_text(
         slide,
-        "CSHA Neural Data Science · Functional-network modularity",
+        "Functional-network analysis · Calcium imaging",
         Inches(0.58),
         Inches(7.19),
         Inches(6.8),
@@ -324,7 +323,7 @@ def build_title(prs):
     add_rect(slide, Inches(0.0), Inches(0.0), Inches(0.16), SLIDE_H, TEAL)
     add_text(
         slide,
-        "CSHA · NEURAL DATA SCIENCE",
+        "CALCIUM-IMAGING NETWORK ANALYSIS",
         Inches(0.82),
         Inches(0.72),
         Inches(5.5),
@@ -348,7 +347,7 @@ def build_title(prs):
     )
     add_text(
         slide,
-        "A hands-on path from one complete calcium-imaging recording\n"
+        "A step-by-step path from one complete calcium-imaging recording\n"
         "to a reproducible all-mice analysis",
         Inches(0.82),
         Inches(3.58),
@@ -415,7 +414,7 @@ def build_roadmap(prs):
     slide = add_slide(prs, "Start small, then test robustness", eyebrow="Tutorial roadmap")
     add_text(
         slide,
-        "Everyone completes Track A. Track B is the launch point for independent projects.",
+        "Part A explains the method with one recording; Part B tests it across mice.",
         Inches(0.63),
         Inches(1.19),
         Inches(11.8),
@@ -426,14 +425,14 @@ def build_roadmap(prs):
 
     tracks = [
         (
-            "TRACK A · RECOMMENDED",
+            "PART A · START HERE",
             "One complete recording",
             "mouse02_sleep + synchronized EEG/EMG",
             "00  download\n01  inspect signals + physiology\n02  build equal-density networks\n03  identify modules\n04  compare states in one mouse\n05–06  explore spatial scale\noptional  multiscale movie",
             TEAL,
         ),
         (
-            "TRACK B · RESEARCH EXTENSION",
+            "PART B · COHORT ANALYSIS",
             "All biological mice",
             "5 sleep mice + 4 anesthesia mice",
             "00 --all  download the cohort\n07  compare modularity across mice\n08  test the scale dependence\n09  quantify module geography\n\nSet PAPER_MODE = True for the full run.",
@@ -1122,7 +1121,7 @@ def build_track_b(prs):
     add_rect(slide, Inches(0.84), Inches(5.02), Inches(7.06), Inches(1.13), RGBColor(27, 52, 74), RGBColor(42, 71, 94), radius=True)
     add_text(
         slide,
-        "Defaults = exploratory course run\nPAPER_MODE = True = full neurons + 200 Louvain runs",
+        "Defaults = responsive preview\nPAPER_MODE = True = full neurons + 200 Louvain runs",
         Inches(1.14),
         Inches(5.30),
         Inches(6.45),
@@ -1318,7 +1317,7 @@ def build_all_spatial(prs):
 
 
 def build_summary(prs):
-    slide = add_slide(prs, "From tutorial to research project", eyebrow="Take-home workflow")
+    slide = add_slide(prs, "From tutorial to further analysis", eyebrow="Take-home workflow")
     steps = [
         ("1", "Inspect", "activity + EEG/EMG + state", TEAL),
         ("2", "Construct", "correlation + fixed-density graph", BLUE),
@@ -1366,7 +1365,7 @@ def build_summary(prs):
 
     add_text(
         slide,
-        "Possible project directions",
+        "Possible analysis extensions",
         Inches(0.64),
         Inches(4.18),
         Inches(4.0),
@@ -1431,9 +1430,9 @@ def main():
     prs = Presentation()
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
-    prs.core_properties.title = "CSHA functional-network modularity hands-on"
+    prs.core_properties.title = "Functional-network modularity tutorial"
     prs.core_properties.subject = "One-recording tutorial and all-mice research extension"
-    prs.core_properties.author = "CSHA Neural Data Science course"
+    prs.core_properties.author = "Masafumi Oizumi"
     prs.core_properties.keywords = "calcium imaging, EEG, EMG, modularity, Louvain, network analysis"
 
     build_title(prs)

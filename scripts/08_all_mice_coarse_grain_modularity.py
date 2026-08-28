@@ -79,13 +79,13 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # ## Settings and ``PAPER_MODE``
 #
 # ``PAPER_MODE`` is a Boolean switch. Keep it ``False`` for an interactive
-# teaching run. Set it to ``True`` only for a final, unattended paper-scale run.
+# preview. Set it to ``True`` only for a final, unattended paper-scale run.
 # The expression ``200 if PAPER_MODE else 20`` means “choose 200 when the switch
 # is True; otherwise choose 20.”
 #
 # The switch changes three settings together:
 #
-# | setting | teaching mode (False) | paper mode (True) |
+# | setting | preview mode (False) | paper mode (True) |
 # | --- | --- | --- |
 # | ``N_RUNS`` | 20 Louvain searches | 200 searches |
 # | ``N_WINDOWS`` | first 2 windows/state | every complete window (``None``) |
@@ -94,8 +94,8 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # Paper mode does not change ``SCALES``, ``K``, ``GAMMA``, or the biological
 # averaging. The ``nnei=1`` graph is the main bottleneck because it can contain
 # thousands of nodes; a complete full-mode run can require many hours or days.
-# Teaching and paper modes follow the same method but can give different numbers
-# because teaching mode samples fewer neurons and windows.
+# Preview and paper modes follow the same method but can give different numbers
+# because preview mode samples fewer neurons and windows.
 #
 # The panel-F example maps are a deliberate exception: ``module_map`` always
 # uses all active neurons and ``FMAP_N_RUNS=200`` in either mode, because the
@@ -103,7 +103,7 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # not the amount of input data.
 
 # %%
-PAPER_MODE = False  # False = teaching run; True = long full-data calculation
+PAPER_MODE = False  # False = preview; True = long full-data calculation
 SCALES = [1, 2, 5, 10, 20, 40, 80, 160]  # neurons/parcel; 1 = single cell
 K = 0.05          # connection density: retain the strongest 5% of pairs
 GAMMA = 1.0       # Louvain module-size resolution
@@ -405,16 +405,3 @@ for name, aw, un in [("SLEEP (awake−NREM)", sleep_aw, sleep_un),
 # scales only a handful of parcels/edges remain, and the contrast can reverse;
 # those estimates are discrete and unstable. The scale dependence is therefore
 # descriptive rather than proof that the state effect vanishes (Fig. 7).
-
-# %% [markdown]
-# ## Practice — relate parcel size to graph size
-#
-# For one recording, create a table containing ``nnei``, the number of parcels,
-# and the number of possible undirected parcel pairs at each scale. Plot parcel
-# count against ``nnei`` and explain why the coarsest modularity estimates may be
-# less stable even though those graphs run quickly.
-#
-# **Where to start:** ``recording_measures`` already prints the parcel count as
-# each scale is constructed. For ``n`` nodes, the number of possible undirected
-# pairs is ``n * (n - 1) / 2``. Write your work in a separate cell; do not replace
-# the supplied cohort analysis.

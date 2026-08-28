@@ -1,4 +1,4 @@
-"""Tests for the focused plotting helpers used by the hands-on."""
+"""Tests for the focused plotting helpers used by the tutorial."""
 
 from __future__ import annotations
 

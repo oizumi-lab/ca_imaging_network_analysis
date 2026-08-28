@@ -71,20 +71,20 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # - exactly 1,500 frames; and
 # - frames belonging to stable Awake or NREM periods.
 #
-# ``MAX_NEURONS`` keeps the course exercise responsive. The paper-scale scripts
-# can use every activity-filtered neuron.
+# ``MAX_NEURONS`` can keep this interactive example responsive. The cohort
+# scripts can use every activity-filtered neuron.
 #
 # Settings to try:
 #
 # - change ``RECORDING`` to another downloaded recording;
-# - reduce ``MAX_NEURONS`` for a faster exercise, or use ``None`` for all active
+# - reduce ``MAX_NEURONS`` for a faster preview, or use ``None`` for all active
 #   neurons (which requires much more memory and time);
 # - change ``REFERENCE_DENSITY`` between 0 and 1. For example, ``0.05`` means
 #   retain 5% of all possible undirected neuron pairs.
 
 # %%
 RECORDING = "mouse02_sleep"  # downloaded dataset name
-MAX_NEURONS = None           # course-size neuron cap; None means no cap
+MAX_NEURONS = None           # optional neuron cap; None means no cap
 REFERENCE_DENSITY = 0.05     # 0.05 = retain the strongest 5% of pairs
 
 rec = dataio.load_recording(RECORDING)
@@ -311,19 +311,3 @@ print("saved ->", graph_path)
 # thresholds are different, but the graphs contain the same number of edges.
 # Script 03 can therefore compare their modular organization without an edge-
 # count difference deciding the result in advance.
-
-# %% [markdown]
-# ## Exercise 2 — change the graph density
-#
-# Choose ``K=2%`` or ``K=10%`` and construct a new graph for both states. Report
-# the correlation threshold and retained edge count for each state.
-#
-# Before running your code, predict whether the threshold will be higher or lower
-# than at 5%. Then verify that Awake and NREM retain the same number of edges even
-# when their thresholds differ.
-#
-# **Where to start:** Step 3 already calls
-# ``net.density_threshold``. Reuse that pattern for one density, and use the
-# upper triangle of the adjacency matrix when counting undirected edges. Put the
-# result in a new cell and leave ``REFERENCE_DENSITY`` unchanged so that you can
-# compare your result with the supplied 5% analysis.

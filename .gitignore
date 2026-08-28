@@ -12,9 +12,8 @@ __pycache__/
 # --- raw_documents (large)
 raw_documents/
 
-# --- Large source talk (kept locally as a design/content reference) ---
-/documents/CSHA_082426.pptx
-/documents/CSHA_handson_tutorial.pptx
+# --- Generated tutorial slide deck ---
+/documents/functional_network_tutorial.pptx
 
 # --- Data (large; downloaded separately, see scripts/00_download_data.py) ---
 data/

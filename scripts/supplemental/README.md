@@ -1,7 +1,7 @@
 # Supplemental analyses
 
 This folder contains optional extensions that are not part of the numbered
-course workflow. Supplemental Python scripts deliberately have descriptive
+tutorial workflow. Supplemental Python scripts deliberately have descriptive
 names without numeric prefixes, so moving an extension here never changes the
 order of the main scripts.
 

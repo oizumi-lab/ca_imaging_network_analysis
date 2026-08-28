@@ -1,8 +1,8 @@
 """funcnet — functional-network analysis for the RIKEN version-3 dataset.
 
-Hands-on toolkit for the neural-data-analysis course: loading and preparing the
-version-3 dataset, visualizing population activity, and computing functional-network
-measures across wakefulness, sleep, and anesthesia.
+Tutorial toolkit for loading and preparing the version-3 dataset, visualizing
+population activity, and computing functional-network measures across
+wakefulness, sleep, and anesthesia.
 
 Typical use (scripts in scripts/ add the repo root to the path)::
 

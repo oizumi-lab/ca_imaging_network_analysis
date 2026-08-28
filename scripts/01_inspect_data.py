@@ -2,7 +2,7 @@
 # # 01 · Inspect one complete calcium-imaging and EEG/EMG recording
 #
 # ## Where this script fits
-# The hands-on follows one recording, ``mouse02_sleep``, from the measured
+# The tutorial follows one recording, ``mouse02_sleep``, from the measured
 # signals to a network result:
 #
 # ```text
@@ -80,7 +80,7 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 #   They do not modify the calcium-network calculations in later scripts.
 
 # %%
-RECORDING = "mouse02_sleep"  # dataset name, without a file extension
+RECORDING = "mouse01_sleep"  # dataset name, without a file extension
 TRACE_NEURONS = 100          # number of randomly selected raw traces to plot
 TRACE_SEED = 7               # integer seed for a reproducible random selection
 DISPLAY_BIN_SECONDS = 1.0    # temporal width of one raster-display column
@@ -465,23 +465,3 @@ print("saved ->", physiology_path)
 # We have one complete, spatially resolved neural population plus independently
 # recorded physiology and state labels. Scripts 02--06 use the same recording so
 # every analysis step can be traced back to this concrete dataset.
-
-# %% [markdown]
-# ## Exercise 1 — compare basic activity between states
-#
-# Before constructing a network, ask a simpler question: is the *average amount*
-# of deconvolved activity different between Awake and NREM?
-#
-# Write a short new cell that uses the first 1,500 stable frames from each state
-# and reports:
-#
-# 1. the mean ``spike_smoothed`` value; and
-# 2. the fraction of ``spike_smoothed`` samples greater than zero.
-#
-# Display the two states in a small table or bar plot. This is a descriptive
-# activity comparison, not a network result.
-#
-# **Where to start:** the state-summary loop near the beginning shows how to
-# obtain frames with ``dataio.state_frames``. The plotting sections show the
-# Matplotlib pattern needed to make a small comparison plot. Add your work in a
-# new cell so that the supplied analysis remains unchanged.
